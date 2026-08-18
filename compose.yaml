@@ -1,0 +1,16 @@
+services:
+  backend:
+    build: .
+    image: bilibili-download:latest
+    container_name: bilibili-download
+    ports:
+      # Expose to the host on loopback only, matching the default host=127.0.0.1; LAN access requires 0.0.0.0 + BLDLP_TOKEN
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # Persist all runtime artifacts: final mp4, SQLite job DB, Netscape cookie, .part resume data
+      - ./downloads:/app/downloads
+      - ./data:/app/data
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped

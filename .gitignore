@@ -1,0 +1,26 @@
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+uv.lock
+
+# Runtime artifacts
+downloads/*
+!downloads/.gitkeep
+data/*.db
+data/cookies*.txt
+data/.parts/*
+!data/.parts/.gitkeep
+*.part
+*.ytdl
+
+# Config (holds sensitive defaults; copy from config.example.toml)
+backend/config.toml
+.env
+
+# Editors
+.vscode/
+.idea/
+.DS_Store

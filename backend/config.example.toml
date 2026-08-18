@@ -1,0 +1,48 @@
+# Bilibili yt-dlp Downloader — backend config example
+# Copy to backend/config.toml and modify as needed; config.toml is excluded by .gitignore.
+
+[server]
+# Local access only; for LAN access change to 0.0.0.0 and be sure to set auth_token
+host = "127.0.0.1"
+port = 8000
+
+# Auth token. Empty = trust the local loopback; non-empty = the userscript "Settings" panel must hold the same value
+auth_token = ""
+
+[download]
+# Final output directory (relative to the project root, or an absolute path)
+dir = "./downloads"
+
+# Staging directory for .part partial files.
+# Must be on a persistent disk (files must survive a power cut); never use /tmp (tmpfs is wiped on reboot and destroys resume)
+staging_dir = "./data/.parts"
+
+# yt-dlp is provided as a Python library by the uv dependencies (pyproject.toml), no PATH install needed
+# ffmpeg path (used for audio/video merging; yt-dlp calls ffmpeg on PATH internally)
+ffmpeg_path = "ffmpeg"
+
+# Max number of jobs downloading at the same time (concurrent queue)
+max_concurrent = 2
+
+# Whether to save into a per-uploader subdirectory
+subdir_by_uploader = true
+
+# Output filename template. The fixed %(id)s prefix guarantees resume hits the same-named .part
+file_template = "[%(id)s] %(title)s.%(ext)s"
+
+# Whether to overwrite an existing file with the same name
+overwrite = false
+
+# Audio-only output codec: mp3 / m4a
+audio_format = "mp3"
+
+[network]
+# Proxy, empty = direct. Examples: socks5://127.0.0.1:1080 or http://127.0.0.1:7890
+proxy = ""
+
+[storage]
+# SQLite job database location
+db_path = "./data/jobs.db"
+
+# Persistent Netscape cookies.txt (required as the yt-dlp library cookiefile; overwritten on every cookie received from the userscript)
+cookie_file = "./data/cookies.txt"

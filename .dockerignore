@@ -1,0 +1,16 @@
+# Dependencies / virtualenvs
+.venv/
+__pycache__/
+*.pyc
+
+# Runtime artifacts (host volume mounts, not part of the build context)
+downloads/
+data/
+
+# Config and secrets
+backend/config.toml
+.env
+
+# Version control
+.git/
+.gitignore
