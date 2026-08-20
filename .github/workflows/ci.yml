@@ -55,3 +55,17 @@ jobs:
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/bilibili-download:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/bilibili-download:1.1.0
+
+      - name: Sync Docker Hub overview from README
+        run: |
+          JWT=$(curl -sS -X POST https://hub.docker.com/v2/users/login \
+            -H 'Content-Type: application/json' \
+            -d "{\"username\":\"$DOCKERHUB_USERNAME\",\"password\":\"$DOCKERHUB_TOKEN\"}" \
+            | jq -r .token)
+          jq -Rs '{full_description:.}' README.md > /tmp/overview.json
+          curl -sS -X PATCH "https://hub.docker.com/v2/repositories/$DOCKERHUB_USERNAME/bilibili-download/" \
+            -H "Authorization: JWT $JWT" -H "Content-Type: application/json" \
+            --data @/tmp/overview.json
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
