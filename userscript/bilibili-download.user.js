@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili yt-dlp Downloader
 // @namespace    https://github.com/panxue/bilibili-download
-// @version      1.3.0
+// @version      1.3.1
 // @description  Bilibili video download: a floating panel that submits jobs to a local FastAPI+yt-dlp backend, with realtime progress and interrupted-download resume
 // @match        https://www.bilibili.com/*
 // @run-at       document-idle

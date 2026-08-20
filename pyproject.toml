@@ -1,6 +1,6 @@
 [project]
 name = "bilibili-download"
-version = "1.3.0"
+version = "1.3.1"
 description = "Bilibili video downloader: userscript floating panel + FastAPI backend + yt-dlp"
 requires-python = ">=3.12"
 dependencies = [

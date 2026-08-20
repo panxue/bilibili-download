@@ -74,7 +74,7 @@ class ResumeBody(BaseModel):
 async def health():
     return {"code": 0, "data": {
         "ok": True,
-        "version": "1.3.0",
+        "version": "1.3.1",
         "yt_dlp": _ytdlp_version(),
         "ffmpeg": _ffmpeg_ok(),
         "max_concurrent": settings.download["max_concurrent"],

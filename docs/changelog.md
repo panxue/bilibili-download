@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.1 — 2026-08-20 — Fast bangumi season probe
+
+- Season URL probing dropped from ~20s to ~1s: flat playlist listing + single-episode quality sample + 10-minute result cache, so reopening a season page is instant (see docs/iterations/1.3.0.md).
+
 ## 1.3.0 — 2026-08-20 — Bangumi (anime/drama) support
 
 - `is_bilibili_url` now accepts `/bangumi/play/ss…` (season) and `/bangumi/play/ep…` (episode); modern SSR bangumi pages are parsed via `playurlSSRData`+`og:title`; season URLs list all episodes (resolved server-side with per-episode `ep` URLs) and the download body accepts a parallel `urls` list so multi-episode jobs download each `ep` (see docs/iterations/1.3.0.md).

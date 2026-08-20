@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 import threading
+import time
 from dataclasses import dataclass, field
 from uuid import uuid4
 
@@ -10,6 +11,7 @@ from yt_dlp.utils import DownloadCancelled, DownloadError, format_bytes, formatS
 
 from .config import Settings
 from .db import JobDB, utcnow
+from .urls import is_bangumi_season
 
 logger = logging.getLogger("bilibili.downloader")
 
@@ -396,7 +398,20 @@ class DownloadManager:
 
 
 def probe_info(settings: Settings, url: str, cookies: str = "") -> dict:
-    """Prefetch video info (including the quality list) via the yt_dlp library extract_info(download=False)."""
+    """Prefetch video info (including the quality list) via the yt_dlp library extract_info(download=False).
+
+    Bangumi season URLs are special-cased: a flat probe lists the episodes in one request (fast,
+    no per-episode format resolution), and only the currently displayed/first episode is fully
+    resolved to build the shared quality list. Parsed results are cached for a few minutes so
+    reopening the season page does not re-do the slow first probe.
+    """
+    cookie = (cookies or "").strip()
+    logged_in = bool(cookie)
+    cache_key = (url, logged_in)
+    hit = _PROBE_CACHE.get(cache_key)
+    if hit and time.monotonic() - hit[0] < _PROBE_CACHE_TTL:
+        return hit[1]
+
     params = {
         "quiet": True,
         "no_warnings": True,
@@ -404,18 +419,65 @@ def probe_info(settings: Settings, url: str, cookies: str = "") -> dict:
         "socket_timeout": 20,
         "http_headers": {"Referer": "https://www.bilibili.com/"},
     }
-    cookie = (cookies or "").strip()
     if cookie:
         write_cookies_file(cookie, settings.cookie_file)
         params["cookiefile"] = settings.cookie_file
     if settings.network.get("proxy"):
         params["proxy"] = settings.network["proxy"]
+
     try:
-        with yt_dlp.YoutubeDL(params) as ydl:
-            data = ydl.extract_info(url, download=False)
+        if is_bangumi_season(url):
+            data = _probe_season(settings, url, params)
+        else:
+            with yt_dlp.YoutubeDL(params) as ydl:
+                data = ydl.extract_info(url, download=False)
     except DownloadError as e:
         raise RuntimeError(_clean_err(str(e))) from e
-    return parse_probe(data, url, bool(cookie))
+
+    info = parse_probe(data, url, logged_in)
+    if len(_PROBE_CACHE) > 64:
+        # crude cap: drop the oldest entry (dict preserves insertion order)
+        _PROBE_CACHE.pop(next(iter(_PROBE_CACHE)))
+    _PROBE_CACHE[cache_key] = (time.monotonic(), info)
+    return info
+
+
+_PROBE_CACHE: dict[tuple[str, bool], tuple[float, dict]] = {}
+_PROBE_CACHE_TTL = 600.0  # seconds; page reopen stays instant, stale quality lists are re-probed after 10 min
+
+
+def _probe_season(settings: Settings, url: str, params: dict) -> dict:
+    """Resolve a bangumi season into a playlist-like structure with per-episode URLs and a quality sample.
+
+    Two probes: (1) a flat playlist extraction lists all episode ids in one pass; (2) the first
+    episode is fully resolved to build the shared quality list. The episode titles and formats are
+    not resolved individually — that is what made the naive season probe take ~20 s for 43 episodes.
+    """
+    flat = dict(params)
+    flat["extract_flat"] = True
+    with yt_dlp.YoutubeDL(flat) as ydl:
+        root = ydl.extract_info(url, download=False)
+
+    entries = [e for e in (root.get("entries") or []) if isinstance(e, dict)]
+    # bilibili flat entries expose the ep id; the canonical ep URL is constructed from it
+    for i, e in enumerate(entries):
+        e.setdefault("webpage_url", f"https://www.bilibili.com/bangumi/play/ep{e.get('id')}")
+        e.setdefault("title", f"EP {i + 1}")
+
+    # resolve the first episode fully for a representative quality list
+    sample = {}
+    if entries:
+        first = entries[0].get("webpage_url")
+        if first:
+            with yt_dlp.YoutubeDL(params) as ydl:
+                try:
+                    sample = ydl.extract_info(first, download=False)
+                except DownloadError as e:
+                    logger.warning("season sample probe failed: %s", _clean_err(str(e))[:200])
+                    sample = {}
+    root = dict(root)
+    root["formats"] = sample.get("formats") or []
+    return root
 
 
 def _clean_err(msg: str) -> str:
@@ -460,7 +522,9 @@ def parse_probe(data: dict, url: str, logged_in: bool) -> dict:
     """
     if data.get("_type") == "playlist":
         entries = [e for e in (data.get("entries") or []) if isinstance(e, dict)]
-        all_formats = [f for e in entries for f in (e.get("formats") or [])]
+        all_formats = list(data.get("formats") or [])
+        for e in entries:
+            all_formats.extend(e.get("formats") or [])
         qualities, auto = _probe_qualities(all_formats)
         first = entries[0] if entries else {}
         return {

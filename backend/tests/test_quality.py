@@ -1,4 +1,4 @@
-from backend.downloader import parse_probe
+from backend.downloader import _PROBE_CACHE, parse_probe, probe_info
 
 
 def formats(*qualities):
@@ -80,3 +80,60 @@ class TestParseProbe:
             {"cid": "32373", "page": 2, "title": "2 逃",
              "url": "https://www.bilibili.com/bangumi/play/ep32373"},
         ]
+
+class TestSeasonProbe:
+    def _patch_ydl(self, dispatch):
+        from unittest import mock
+
+        class FakeYDL:
+            def __init__(self, params=None):
+                self.params = params or {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def extract_info(self, target, download=False):
+                return dispatch(target)
+
+        return mock.patch("backend.downloader.yt_dlp.YoutubeDL", FakeYDL)
+
+    def test_fast_season_probe_builds_pages_and_caches(self, tmp_path):
+        from backend.config import Settings
+
+        settings = Settings(tmp_path / "nonexistent.toml")
+        _PROBE_CACHE.clear()
+        url = "https://www.bilibili.com/bangumi/play/ss1733"
+        root = {
+            "_type": "playlist",
+            "title": "罗小黑战记",
+            "entries": [
+                {"id": "32374", "webpage_url": "https://www.bilibili.com/bangumi/play/ep32374", "title": "1 喵"},
+                {"id": "32373", "webpage_url": "https://www.bilibili.com/bangumi/play/ep32373", "title": "2 逃"},
+            ],
+        }
+        sample = {"id": "32374", "formats": formats(80, 32)}
+
+        def dispatch(target):
+            return root if str(target) == url else sample
+
+        with self._patch_ydl(dispatch):
+            info = probe_info(settings, url)
+        assert info["title"] == "罗小黑战记"
+        assert len(info["pages"]) == 2
+        assert info["pages"][0]["url"] == "https://www.bilibili.com/bangumi/play/ep32374"
+        assert [q["label"] for q in info["available_qualities"]] == ["1080P", "480P"]
+        assert (url, False) in _PROBE_CACHE
+        # cached revisit must not hit yt-dlp again
+        calls = []
+
+        def dispatch2(target):
+            calls.append(str(target))
+            return sample
+
+        with self._patch_ydl(dispatch2):
+            info2 = probe_info(settings, url)
+        assert info2 == info
+        assert calls == []
