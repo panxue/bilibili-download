@@ -62,7 +62,7 @@ BLDLP_DOWNLOAD_DIR=/data/videos uv run uvicorn backend.main:app --host 127.0.0.1
 ```
 Override priority: CLI(env) > config.toml > built-in defaults.
 
-Container env vars: compose passes the same-named `BLDLP_*` through `.env`; path-type ones (`BLDLP_DOWNLOAD_DIR`) point to in-container mount points (`/app/downloads`, `/app/data`). `auth_token` is injected only via `BLDLP_TOKEN`; do not hard-code it into the image/volumes.
+Container env vars: compose passes the same-named `BLDLP_*` through `.env`; path-type ones (`BLDLP_DOWNLOAD_DIR`) point to in-container mount points (`/app/downloads`, `/app/data`). `auth_token` is injected only via `BLDLP_TOKEN`; do not hard-code it into the image/volumes. In the Docker run, `backend/config.toml` is **not loaded at all** (it is excluded from the image by `.dockerignore`), so the container uses the built-in defaults + these env overrides; `dir` resolves to `/app/downloads`, whose host-side location is fixed by the `compose.yaml` volume (`BLDLP_DOWNLOAD_DIR_HOST`), not by the config file. `backend/config.toml` only takes effect for local source runs.
 
 ## 4. Userscript-side Config (③, browser, GM_setValue)
 
@@ -70,8 +70,7 @@ Container env vars: compose passes the same-named `BLDLP_*` through `.env`; path
 |-----|------|------|
 | `backendUrl` | `http://127.0.0.1:8000` | editable in the settings panel |
 | `authToken` | `""` | requests require it to match the backend |
-| `defaultQuality` | `auto` | initial tier of the new-download form |
-| `codecPref` | `auto` | codec preference order (comma-separated families, submitted with the download request) |
+| `codecPref` | `auto` | codec preference order (comma-separated yt-dlp vcodec prefixes, e.g. `"avc1,hev1,hvc1,av01"`); sent with `/api/info` (drives format_id binding) and echoed on the download request |
 
 Userscript settings → `GM_setValue`; the panel saves on change and takes effect immediately.
 
@@ -82,6 +81,7 @@ Userscript settings → `GM_setValue`; the panel saves on change and takes effec
 | `url` / `pages[]` | page parsing | required |
 | `quality` | form | auto\|8K\|4K\|2K\|1080P60\|1080P\|720P60\|720P\|480P\|360P\|audio |
 | `codec` | settings panel (③) | codec preference order, submitted with the request |
+| `format_id` | `/api/info` bounded tier | optional; the concrete yt-dlp stream picked by the backend per codec preference |
 | `audio_only` | form | linked to quality=audio |
 | `cookies` | three-key string of the current page carried by the form | temporary, not persisted |
 | `overwrite` | frontend fixed false (no option yet) | same-name files are not overwritten |

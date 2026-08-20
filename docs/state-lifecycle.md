@@ -57,7 +57,7 @@ yt-dlp natively supports a separate staging path, **without changing the final f
 
 ```python
 yt_dlp.YoutubeDL({
-    "format": quality_to_format(quality, codec),      # 8K/4K/2K/1080P60/…/any NNNP
+    "format": _download_format(state),                  # "{format_id}+bestaudio/{height+codec fallback}/best" if a bound format_id is set, else quality_to_format(quality, codec)
     "outtmpl": "{subdir/}{file_template}",
     "paths": {"home": download_dir, "temp": staging_dir},   # temp=staging_dir writes .part here
     "merge_output_format": "mp4",
@@ -76,6 +76,7 @@ yt_dlp.YoutubeDL({
 
 Key points:
 - `continue` + fixed naming (`[%(id)s] %(title)s.%(ext)s`, id prefix unchanged) → after interruption, re-run finds the `.part` to resume
+- **format resolution priority**: a bound `format_id` (chosen at probe time per the user's codec preference) downloads as `{format_id}+bestaudio`; bilibili format_ids are stable per (qn, codec) across a season but individual episodes can differ, so the `/`-fallback chain (height+codec recorded in `_FORMAT_TABLE`, then `best`) keeps batch downloads working when an episode lacks the exact id
 - **Referer header is required** (Bilibili merge validation)
 - Cookie goes via `cookiefile` (Netscape persistent file); putting Cookie in `http_headers` is not recognized as login state, quality capped at 1080P
 - Audio-only tier: `audio_only=true` → `postprocessors` FFmpegExtractAudio (or keep m4a, see config)

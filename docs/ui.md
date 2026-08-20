@@ -57,11 +57,10 @@
 
 ### 3.1 Quality Control (dynamic list, data-driven)
 
-- The quality buttons are fully generated from `/api/info.available_qualities`, **no longer hard-coded presets**: `Auto ({auto_resolution})` + the real list (including 1080P/720P/480P/360P/2K/4K/8K, codec labels)
+- The quality buttons are fully generated from `/api/info.available_qualities`, **no longer hard-coded presets**: `Auto ({auto_resolution})` + the real list; each button shows yt-dlp's own tier label (e.g. `4K 超高清`, `HDR 真彩`) plus a human-readable size, and carries the tier's bound `format_id` (the backend picks the concrete stream per the codec preference — the frontend just displays and passes it back)
 - `auto_resolution` displays in real time the highest tier the auto tier resolves to under current permissions (e.g. `Auto (1080P60)`)
-- The backend filters the list by cookie permissions → the frontend needs no gray-out logic; tiers lacking permission are simply not in the list (not logged in: only 480P and below)
-- The settings panel "default quality" dropdown supports 8K/4K/2K/1080P/720P/480P/audio
-- The settings panel "codec preference" dropdown: Auto (hvc>av01>avc) / HEVC>AV1>H.264 / AV1>HEVC>H.264 / H.264 first / HEVC only / H.264 only; submitted via the `codec` field of `POST /api/download` (stored in GM_setValue; the backend only applies it per-job via params, not persisted to the config store)
+- The backend filters the list by cookie permissions → the frontend needs no gray-out logic; tiers lacking permission are simply not in the list (not logged in: only 480P and below); the first button (`Auto`) is pre-selected
+- The settings panel "codec preference" dropdown: Auto (hev1>hvc1>av01>avc1) / HEVC>AV1>H.264 / AV1>HEVC>H.264 / H.264 first / HEVC only / H.264 only; values are literal yt-dlp vcodec prefixes, submitted with the `codec` field of `POST /api/info` (drives format_id binding) and echoed on `POST /api/download` (stored in GM_setValue; the backend only applies it per request, not persisted to the config store)
 
 ### 3.2 Parse Source Priority
 
@@ -102,10 +101,9 @@ One card row per job:
 |----|------|------|
 | Backend URL | `http://127.0.0.1:8000` | GM_setValue |
 | auth_token | empty | GM_setValue |
-| Default quality | auto | GM_setValue |
 | Codec preference | auto | GM_setValue |
 
-- Panel bottom: read-only display of the download dir and yt-dlp version returned by `GET /api/config` (confirm the target location)
+- Panel bottom: read-only display of concurrency, yt-dlp version, and file template returned by `GET /api/config` (backend status)
 - Emergency channel: `GM_registerMenuCommand("Set backend URL", ...)` pops an input — an escape hatch when the floating panel fails to render
 
 ## 6. Full Interaction Sequence (main flow)

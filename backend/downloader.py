@@ -51,25 +51,25 @@ QUALITY_HEIGHT = {
     "360P": 360,
 }
 
-# codec preference: hvc (HEVC, incl. hvc1/hev1) > av01 (AV1) > avc (H.264)
-# the frontend settings panel may override the order; format: comma-separated codec families, e.g. "hvc,av01,avc"
-CODEC_PRIORITY_ORDER = ["hvc", "av01", "avc"]
-CODEC_ALIASES = {"hev1": "hvc"}
+# codec preference order, expressed as literal yt-dlp vcodec prefixes (no family aliasing):
+# HEVC first (hev1/hvc1, whichever spelling a stream reports), then av01 (AV1), then avc1 (H.264).
+# the frontend settings panel may override the order; format: comma-separated prefixes, e.g. "avc1,hev1,hvc1"
+CODEC_PRIORITY_ORDER = ["hev1", "hvc1", "av01", "avc1"]
 
 
 def normalize_codec_order(codec: str) -> list[str]:
-    """Normalize a requested codec preference ("auto" or "hvc,av01,avc") into an ordered family list.
+    """Normalize a requested codec preference ("auto" or comma-separated vcodec prefixes) into an ordered prefix list.
 
-    - "auto"/empty → default order (hvc > av01 > avc)
-    - explicit list → dedupe in the given order, append any families not mentioned to the end
+    - "auto"/empty → default order (hev1 > hvc1 > av01 > avc1)
+    - explicit list → dedupe in the given order, append any prefixes not mentioned to the end
     """
     if not codec or codec.strip().lower() in ("", "auto"):
         return list(CODEC_PRIORITY_ORDER)
     wanted = []
     for item in (codec or "").replace(" ", "").split(","):
-        fam = CODEC_ALIASES.get(item.lower(), item.lower())
-        if fam in CODEC_PRIORITY_ORDER and fam not in wanted:
-            wanted.append(fam)
+        prefix = item.lower()
+        if prefix in CODEC_PRIORITY_ORDER and prefix not in wanted:
+            wanted.append(prefix)
     if not wanted:
         return list(CODEC_PRIORITY_ORDER)
     wanted.extend(c for c in CODEC_PRIORITY_ORDER if c not in wanted)
@@ -77,12 +77,8 @@ def normalize_codec_order(codec: str) -> list[str]:
 
 
 def codec_family(vcodec: str) -> str:
-    """Normalize the first segment of vcodec: hvc1.1.6.L150.90 → hvc; hev1... → hvc."""
+    """The literal first segment of the yt-dlp vcodec: hvc1.1.6.L150.90 → hvc1; hev1.1.6 → hev1."""
     fam = (vcodec or "").split(".", 1)[0].lower()
-    fam = CODEC_ALIASES.get(fam, fam)
-    for key in CODEC_PRIORITY_ORDER:
-        if fam.startswith(key):
-            return key
     return fam or "unknown"
 
 
@@ -101,8 +97,18 @@ def _codec_preferred(height: int | None, codec: str = "auto") -> str:
     return "/".join(alts)
 
 
+def _single_fallback(height: int | None, family: str) -> str:
+    """The exact match for one vcodec prefix: bestvideo[height<=H][vcodec*=fam]+bestaudio.
+
+    Used when caching fallback expressions per format_id (the bind already resolved the family, so
+    only that one codec is the "same parameters" guarantee; the download chain appends /best after).
+    """
+    cond = f"[height<={height}]" if height else ""
+    return f"bestvideo{cond}[vcodec*={family}]+bestaudio"
+
+
 def quality_to_format(quality: str, codec: str = "auto") -> str:
-    """Map a quality label to a yt-dlp -f expression; codec preference defaults to hvc>av01>avc, overridable per request.
+    """Map a quality label to a yt-dlp -f expression; codec preference defaults to hev1>hvc1>av01>avc1, overridable per request.
 
     Supports: auto/8K/4K/2K/1080P60/1080P/720P60/720P/480P/360P/audio/any NNN P.
     Returns a format string (empty codec / auto uses the default).
@@ -118,6 +124,32 @@ def quality_to_format(quality: str, codec: str = "auto") -> str:
     return _codec_preferred(None, codec)
 
 TERMINAL = {"done", "failed", "canceled"}
+
+# format_id → fallback -f expression (built from the same yt-dlp format object that yielded the id,
+# i.e. its height + codec family). Bilibili format_ids are stable per (qn, codec) across a season,
+# but individual episodes can differ (e.g. a hev1 1080P id swapped on one ep) — the /-fallback keeps
+# batch downloads working when an id goes missing. Keyed by format_id, conflicts keep the latest probe.
+_FORMAT_TABLE: dict[str, str] = {}
+
+
+def bind_qualities(qualities: list[dict], codec: str = "auto") -> list[dict]:
+    """Pick the concrete format_id of each quality tier per the user's codec preference.
+
+    The frontend is display-only: binding the format_id (and recording its height+codec fallback in
+    _FORMAT_TABLE) is backend logic. Each entry becomes {qn, label, format_id, codec, size}.
+    """
+    order = normalize_codec_order(codec)
+    out = []
+    for q in qualities:
+        families = q.get("format_ids") or {}
+        fam = next((c for c in order if families.get(c)), None)
+        fid = families.get(fam) or "" if fam else ""
+        if fid:
+            _FORMAT_TABLE[fid] = _single_fallback(q.get("height"), fam or "auto")
+        out.append({"qn": q.get("qn"), "label": q.get("label"),
+                    "format_id": fid, "codec": fam or "",
+                    "size": q.get("size", "")})
+    return out
 
 
 def _fmt_speed(speed) -> str:
@@ -148,6 +180,22 @@ class JobState:
     error: str = ""
     cancel_event: threading.Event | None = None
     created_at: str = field(default_factory=lambda: utcnow())
+
+
+def _download_format(state: JobState) -> str:
+    """Resolve the yt-dlp -f expression for a job.
+
+    Priority:
+      1. explicit format_id from the probe-time binding: "{id}+bestaudio" with a /-fallback to the
+         height+codec chain (and finally "best") for episodes lacking that exact id
+      2. audio-only request → bestaudio
+      3. fall back to the legacy height-based mapping (auto / NNN P / audio)
+    """
+    fid = (state.params.get("format_id") or "").strip()
+    if fid and state.quality != "audio":
+        fb = (state.params.get("format_fallback") or "").strip() or "best"
+        return f"{fid}+bestaudio/best" if fb == "best" else f"{fid}+bestaudio/{fb}/best"
+    return quality_to_format(state.quality, (state.params.get("codec") or ""))
 
 
 class DownloadManager:
@@ -298,7 +346,7 @@ class DownloadManager:
             "quiet": True,
             "no_warnings": True,
             "noplaylist": True,
-            "format": quality_to_format(state.quality, (state.params.get("codec") or "")),
+            "format": _download_format(state),
             "outtmpl": tpl,
             "paths": {"home": self.settings.download_dir, "temp": self.settings.staging_dir},
             "merge_output_format": "mp4",
@@ -430,8 +478,10 @@ def probe_info(settings: Settings, url: str, cookies: str = "") -> dict:
         params["proxy"] = settings.network["proxy"]
 
     try:
-        if is_bangumi_season(url):
-            data = _probe_season(settings, url, params)
+        if is_bangumi_url(url):
+            # both ss (season) and ep (episode) links belong to a bangumi series; list the whole
+            # season so the panel can offer every episode, not just the currently-open one
+            data = _probe_season_any(settings, url, params)
         else:
             with yt_dlp.YoutubeDL(params) as ydl:
                 data = ydl.extract_info(url, download=False)
@@ -448,6 +498,28 @@ def probe_info(settings: Settings, url: str, cookies: str = "") -> dict:
 
 _PROBE_CACHE: dict[tuple[str, bool], tuple[float, dict]] = {}
 _PROBE_CACHE_TTL = 600.0  # seconds; page reopen stays instant, stale quality lists are re-probed after 10 min
+
+
+def _probe_season_any(settings: Settings, url: str, params: dict) -> dict:
+    """Run the season probe for any bangumi URL.
+
+    ss links are used directly; ep links are resolved to the parent season first (an ep page
+    exposes the season_id), then the season probe lists every episode. Falls back to a plain
+    single-video extraction if the season cannot be resolved.
+    """
+    if is_bangumi_season(url):
+        return _probe_season(settings, url, params)
+    with yt_dlp.YoutubeDL(params) as ydl:
+        ep_data = ydl.extract_info(url, download=False)
+    season_id = ep_data.get("season_id")
+    if season_id:
+        season_url = f"https://www.bilibili.com/bangumi/play/ss{season_id}"
+        try:
+            return _probe_season(settings, season_url, params)
+        except DownloadError as e:
+            logger.warning("season probe for %s failed, fall back to single episode: %s",
+                           season_url, _clean_err(str(e))[:200])
+    return ep_data
 
 
 def _probe_season(settings: Settings, url: str, params: dict) -> dict:
@@ -493,28 +565,51 @@ def _clean_err(msg: str) -> str:
 
 
 def _probe_qualities(formats: list[dict]) -> tuple[list[dict], str]:
-    """Group yt-dlp formats into a bilibili quality list + the auto (highest) label."""
-    height_labels = {360: "360P", 480: "480P", 720: "720P", 1080: "1080P", 1440: "2K", 2160: "4K", 4320: "8K"}
-    # qn (bilibili quality code) → display label; high-frame-rate tiers (60fps) are separated from the regular ones
-    qn_labels = {6: "240P", 16: "360P", 32: "480P", 64: "720P", 74: "720P60",
-                 80: "1080P", 112: "1080P60", 116: "1080P60", 120: "4K", 127: "8K"}
+    """Group yt-dlp formats into a bilibili quality list + the auto (highest) label.
 
+    No tiers are mapped by hand here. Each quality entry exposes:
+      - label:   yt-dlp's own display name (e.g. "4K 超高清", "HDR 真彩")
+      - format_ids: {vcodec prefix: format_id} — one concrete stream per codec, e.g. {"hev1": "100036"}
+                   preference and sends it to the download endpoint (no height/codec math needed)
+      - codecs / size: informational, for display only
+    """
     videos = [f for f in formats if f.get("vcodec") and f.get("vcodec") != "none"]
+    audios = [f for f in formats if f.get("acodec") and f.get("acodec") != "none"]
     groups: dict[int, list[dict]] = {}
     for f in videos:
         groups.setdefault(f.get("quality") or 0, []).append(f)
+
+    # largest audio track (bilibili keeps audio separate; every video tier pairs with the same audio)
+    audio_size = max((f.get("filesize") or f.get("filesize_approx") or 0) for f in audios) if audios else 0
 
     qualities = []
     for qn in sorted(groups, reverse=True):
         fs = groups[qn]
         height = max((f.get("height") or 0 for f in fs), default=0)
-        label = qn_labels.get(qn) or height_labels.get(height, f"{height}P")
+        labels = {f.get("format") for f in fs if f.get("format")}
+        label = next(iter(labels), "") or (f"{height}P" if height else f"Q{qn}")
         codecs = sorted({codec_family(f.get("vcodec") or "") for f in fs}, key=codec_rank)
-        qualities.append({"qn": qn, "label": label, "codecs": codecs})
+        format_ids = {codec_family(f.get("vcodec") or ""): f.get("format_id")
+                      for f in fs if f.get("format_id")}
+        sizes = [(f.get("filesize") or f.get("filesize_approx") or 0) for f in fs]
+        total = (max(sizes, default=0) + audio_size) if sizes and audio_size else (max(sizes, default=0))
+        qualities.append({"qn": qn, "label": label, "height": height, "codecs": codecs,
+                          "format_ids": format_ids, "size": _fmt_size(total)})
 
     highest_qn = max(groups, default=0)
     auto = next((q["label"] for q in qualities if q["qn"] == highest_qn), "auto")
     return qualities, auto
+
+
+def _fmt_size(n: float) -> str:
+    """Human-readable file size (bilibili reports filesize_approx in bytes)."""
+    if n <= 0:
+        return ""
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return f"{n:.1f} {unit}"
+        n /= 1024
+    return ""
 
 
 def parse_probe(data: dict, url: str, logged_in: bool) -> dict:

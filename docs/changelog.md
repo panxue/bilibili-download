@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 — 2026-08-21 — format_id-bound quality pipeline
+
+- Quality tiers now show yt-dlp's own names (`4K 超高清`, `HDR 真彩`) instead of backend-height labels ("two 4K" fixed); per the user's `codec` preference the backend binds one concrete `format_id` per tier at `/api/info` time; downloads use `{format_id}+bestaudio` with a height+codec `/`-fallback (recorded in `_FORMAT_TABLE`) so season batches survive episodes with a differing id; the settings "default quality" dropdown was removed (see docs/iterations/1.4.0.md).
+
 ## 1.3.1 — 2026-08-20 — Fast bangumi season probe
 
 - Season URL probing dropped from ~20s to ~1s: flat playlist listing + single-episode quality sample + 10-minute result cache, so reopening a season page is instant (see docs/iterations/1.3.0.md).

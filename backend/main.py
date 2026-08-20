@@ -12,7 +12,13 @@ from pydantic import BaseModel, Field
 
 from .config import Settings
 from .db import JobDB
-from .downloader import TERMINAL, DownloadManager, probe_info
+from .downloader import (
+    _FORMAT_TABLE,
+    TERMINAL,
+    DownloadManager,
+    bind_qualities,
+    probe_info,
+)
 from .urls import is_bilibili_url, with_page
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -52,6 +58,7 @@ def _check_auth(request: Request) -> None:
 class InfoBody(BaseModel):
     url: str
     cookies: str = ""
+    codec: str = ""
 
 
 class DownloadBody(BaseModel):
@@ -60,6 +67,7 @@ class DownloadBody(BaseModel):
     urls: list[str] = Field(default_factory=list)
     quality: str = "auto"
     codec: str = "auto"
+    format_id: str = ""
     audio_only: bool = False
     cookies: str = ""
     overwrite: bool = False
@@ -74,7 +82,7 @@ class ResumeBody(BaseModel):
 async def health():
     return {"code": 0, "data": {
         "ok": True,
-        "version": "1.3.1",
+        "version": "1.4.0",
         "yt_dlp": _ytdlp_version(),
         "ffmpeg": _ffmpeg_ok(),
         "max_concurrent": settings.download["max_concurrent"],
@@ -129,6 +137,9 @@ async def api_info(body: InfoBody, request: Request):
         return err
     try:
         info = await anyio.to_thread.run_sync(probe_info, settings, body.url, body.cookies or "")
+        info = dict(info)
+        info["available_qualities"] = bind_qualities(
+            info.get("available_qualities") or [], body.codec or "")
     except Exception as e:  # noqa: BLE001
         logger.warning("info failed: %s", str(e)[:300])
         return {"code": -2, "msg": f"parse failed: {str(e)[:200]}"}
@@ -157,7 +168,11 @@ async def api_download(body: DownloadBody, request: Request):
             url = with_page(body.url, page)
             bvid = body.url.rsplit("/", 1)[-1].split("?")[0]
         params = {"cookies": body.cookies or "", "overwrite": body.overwrite,
-                   "codec": (body.codec or "auto").strip() or "auto"}
+                   "codec": (body.codec or "auto").strip() or "auto",
+                   "format_id": (body.format_id or "").strip()}
+        fid = params["format_id"]
+        if fid:
+            params["format_fallback"] = _FORMAT_TABLE.get(fid, "")
         title = f"{base_title} P{page}" if base_title else f"P{page}"
         job = manager.create_job(url=url, bvid=bvid,
                                  page=page, title=title, quality=quality, params=params)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili yt-dlp Downloader
 // @namespace    https://github.com/panxue/bilibili-download
-// @version      1.3.1
+// @version      1.4.0
 // @description  Bilibili video download: a floating panel that submits jobs to a local FastAPI+yt-dlp backend, with realtime progress and interrupted-download resume
 // @match        https://www.bilibili.com/*
 // @run-at       document-idle
@@ -81,11 +81,15 @@
     if (og && og.content) seasonTitle = og.content.trim();
     var title = seasonTitle || document.title.split("-")[0].trim() || ("Pgc " + id);
     if (kind === "ep") {
+      // an episode page belongs to a season too: the backend resolves the parent season so the
+      // panel lists every episode of the series (not just the currently-open one)
       return {
         bvid: (arc && arc.bvid) || ("ep" + id),
         title: title,
         uploader: "",
-        pages: [{ page: 1, cid: (arc && arc.cid) || 0, title: epTitleLabel(epInfo) }],
+        pages: [],
+        season: true,
+        currentEp: epNumber(epInfo),
       };
     }
     // season page: the episode list is resolved by the backend probe, not present in the DOM
@@ -201,7 +205,10 @@
   }
 
   function fetchInfo(url, cookies) {
-    return api("/api/info", { method: "POST", data: { url: url, cookies: cookies } });
+    return api("/api/info", {
+      method: "POST",
+      data: { url: url, cookies: cookies, codec: getCfg().codecPref || "auto" },
+    });
   }
   function postDownload(payload) {
     return api("/api/download", { method: "POST", data: payload });
@@ -292,8 +299,10 @@
     ".bdlp-btn{box-sizing:border-box;width:100%;margin-top:12px;padding:10px;background:#3f9cff;border:0;" +
     "color:#fff;border-radius:10px;font-size:14px;cursor:pointer}" +
     ".bdlp-btn:disabled{background:#3a4258;color:#8b94a8;cursor:not-allowed}" +
-    ".bdlp-opt{display:block;background:#0f1420;border:1px solid #2c3647;color:#c3cad6;border-radius:8px;" +
-    "padding:6px 10px;font-size:12px;cursor:pointer}" +
+    ".bdlp-opt{display:flex;align-items:center;justify-content:space-between;gap:8px;" +
+    "background:#0f1420;border:1px solid #2c3647;color:#c3cad6;border-radius:8px;" +
+    "padding:6px 10px;font-size:12px;cursor:pointer;text-align:left}" +
+    ".bdlp-opt .bdlp-qsize{color:#7c8797;font-size:11px;flex-shrink:0}" +
     ".bdlp-opt.sel{background:#1d2c44;border-color:#4c9fff;color:#fff}" +
     ".bdlp-opt:disabled{opacity:.4;cursor:not-allowed}" +
     ".bdlp-job{background:#151d2d;border:1px solid #263148;border-radius:10px;padding:10px;margin-bottom:8px}" +
@@ -466,21 +475,20 @@
 
   function applyQualities(qbox, info) {
     var items = [];
-    items.push({ v: "auto", label: info.auto_resolution ? "Auto (" + info.auto_resolution + ")" : "Auto" });
+    items.push({ v: "auto", label: info.auto_resolution ? "Auto (" + info.auto_resolution + ")" : "Auto", size: "", format_id: "" });
     (info.available_qualities || []).forEach(function (q) {
-      items.push({ v: q.label, label: q.label });
+      items.push({ v: q.label, label: q.label, size: q.size || "", format_id: q.format_id || "" });
     });
     qbox.innerHTML = "";
-    items.forEach(function (q) {
-      var btn = el("button", { type: "button", "class": "bdlp-opt" }, q.label);
+    items.forEach(function (q, i) {
+      var btn = el("button", { type: "button", "class": "bdlp-opt" });
+      btn.appendChild(el("span", { "class": "bdlp-qlabel" }, q.label));
+      if (q.size) btn.appendChild(el("span", { "class": "bdlp-qsize" }, q.size));
       btn.dataset.quality = q.v;
-      if (q.v === defaultQuality()) btn.classList.add("sel");
+      btn.dataset.formatId = q.format_id;
+      if (i === 0) btn.classList.add("sel");
       qbox.appendChild(btn);
     });
-  }
-
-  function defaultQuality() {
-    return getCfg().defaultQuality || "auto";
   }
 
   function startDownloadClicked(body, meta, qbox, audio, info) {
@@ -502,6 +510,9 @@
     var sel = qbox.querySelector(".bdlp-opt.sel");
     var quality = sel ? sel.dataset.quality : "auto";
     var audioOnly = audio.checked;
+    // the backend already bound the format_id per the user's codec preference at probing time;
+    // the frontend only passes it back ("auto"/audio carry no format_id)
+    var formatId = (sel && !audioOnly && quality !== "auto") ? sel.dataset.formatId : "";
 
     var btn = body.querySelector(".bdlp-btn");
     btn.disabled = true;
@@ -513,6 +524,7 @@
         pages: pages,
         urls: urls,
         quality: audioOnly ? "audio" : quality,
+        format_id: formatId,
         audio_only: audioOnly,
         cookies: ck,
         codec: getCfg().codecPref || "auto",
@@ -706,9 +718,8 @@
     function save() {
       var url = body.querySelector(".bdlp-set-url").value.trim();
       var token = body.querySelector(".bdlp-set-token").value.trim();
-      var quality = body.querySelector(".bdlp-set-qual").value;
       var codec = body.querySelector(".bdlp-set-codec").value;
-      setCfg({ backendUrl: url, authToken: token, defaultQuality: quality, codecPref: codec });
+      setCfg({ backendUrl: url, authToken: token, codecPref: codec });
       showTip(body, "Saved", false);
       checkHealth();
     }
@@ -720,12 +731,12 @@
     function codecSelectHtml(extraClass) {
       return '<span class="bdlp-lbl">Codec preference</span>' +
         '<select class="bdlp-set-codec' + (extraClass || "") + '">' +
-        codecOptionHtml("auto", "Auto (hvc>av01>avc)") +
-        codecOptionHtml("hvc,av01,avc", "HEVC > AV1 > H.264") +
-        codecOptionHtml("av01,hvc,avc", "AV1 > HEVC > H.264") +
-        codecOptionHtml("avc,hvc,av01", "H.264 first") +
-        codecOptionHtml("hvc", "HEVC only") +
-        codecOptionHtml("avc", "H.264 only") +
+        codecOptionHtml("auto", "Auto (hev1>hvc1>av01>avc1)") +
+        codecOptionHtml("hev1,hvc1,av01,avc1", "HEVC > AV1 > H.264") +
+        codecOptionHtml("av01,hev1,hvc1,avc1", "AV1 > HEVC > H.264") +
+        codecOptionHtml("avc1,hev1,hvc1,av01", "H.264 first") +
+        codecOptionHtml("hev1,hvc1", "HEVC only") +
+        codecOptionHtml("avc1", "H.264 only") +
         "</select>";
     }
 
@@ -743,20 +754,10 @@
           '<input class="bdlp-set-url" type="url" value="' + esc(c.backendUrl || "http://127.0.0.1:8000") + '">' +
           '<span class="bdlp-lbl">auth_token (leave empty to omit)</span>' +
           '<input class="bdlp-set-token" type="password" value="' + esc(c.authToken || "") + '">' +
-'<span class="bdlp-lbl">Default quality</span>' +
-  '<select class="bdlp-set-qual">' +
-  '<option value="auto">Auto</option><option value="8K">8K</option>' +
-  '<option value="4K">4K</option><option value="2K">2K</option>' +
-  '<option value="1080P60">1080P60</option><option value="1080P">1080P</option>' +
-  '<option value="720P60">720P60</option><option value="720P">720P</option>' +
-  '<option value="480P">480P</option><option value="360P">360P</option>' +
-  '<option value="audio">Audio only</option></select>' +
           codecSelectHtml() +
   '<button class="bdlp-btn">Save settings</button>' +
   '<div class="bdlp-sep"></div>' +
           (info ? backendInfoHtml(info) : warnHtml("Backend not running, cannot read backend config.", true));
-        body.querySelector(".bdlp-set-qual").value = c.defaultQuality || "auto";
-        if (!body.querySelector(".bdlp-set-qual").value) body.querySelector(".bdlp-set-qual").value = "auto";
         if (body.querySelector(".bdlp-set-codec")) codecSelected(body.querySelector(".bdlp-set-codec"));
         body.querySelector(".bdlp-btn").addEventListener("click", save);
       })
@@ -766,27 +767,16 @@
           '<input class="bdlp-set-url" type="url" value="' + esc(c.backendUrl || "http://127.0.0.1:8000") + '">' +
           '<span class="bdlp-lbl">auth_token</span>' +
           '<input class="bdlp-set-token" type="password" value="' + esc(c.authToken || "") + '">' +
-'<span class="bdlp-lbl">Default quality</span>' +
-  '<select class="bdlp-set-qual"><option value="auto">Auto</option>' +
-  '<option value="8K">8K</option><option value="4K">4K</option>' +
-  '<option value="2K">2K</option><option value="1080P60">1080P60</option>' +
-  '<option value="1080P">1080P</option>' +
-  '<option value="720P60">720P60</option><option value="720P">720P</option>' +
-  '<option value="480P">480P</option><option value="360P">360P</option>' +
-  '<option value="audio">Audio only</option></select>' +
           codecSelectHtml() +
           '<button class="bdlp-btn">Save settings</button>' +
           warnHtml("Backend unreachable, cannot read backend config.", true);
-        body.querySelector(".bdlp-set-qual").value = c.defaultQuality || "auto";
-        if (!body.querySelector(".bdlp-set-qual").value) body.querySelector(".bdlp-set-qual").value = "auto";
         if (body.querySelector(".bdlp-set-codec")) codecSelected(body.querySelector(".bdlp-set-codec"));
         body.querySelector(".bdlp-btn").addEventListener("click", save);
       });
   }
 
   function backendInfoHtml(info) {
-    return '<div class="bdlp-kv"><b>Download dir</b>' + esc(info.download_dir) + "</div>" +
-      '<div class="bdlp-kv"><b>Concurrency</b>' + esc(String(info.max_concurrent)) + "</div>" +
+    return '<div class="bdlp-kv"><b>Concurrency</b>' + esc(String(info.max_concurrent)) + "</div>" +
       '<div class="bdlp-kv"><b>yt-dlp</b>' + esc(info.yt_dlp_version || info.yt_dlp_path || "") + "</div>" +
       '<div class="bdlp-kv"><b>File template</b>' + esc(info.file_template) + "</div>";
   }

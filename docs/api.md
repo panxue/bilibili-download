@@ -34,7 +34,8 @@ Request:
 ```json
 {
   "url": "https://www.bilibili.com/video/BV1xx411c7mD",
-  "cookies": "SESSDATA=...; DedeUserID=...; bili_jct=..."   // may be an empty string (not logged in)
+  "cookies": "SESSDATA=...; DedeUserID=...; bili_jct=...",  // may be an empty string (not logged in)
+  "codec": "auto"              // codec preference order, used to bind each tier's format_id (auto = hev1>hvc1>av01>avc1)
 }
 ```
 Response:
@@ -42,19 +43,19 @@ Response:
 {
   "code": 0,
   "data": {
-"bvid": "BV1xx411c7mD",
-  "title": "Video Title",
-  "uploader": "Uploader",
-  "duration": 482,
-  "logged_in": true,
-  "vip_type": "big_vip",          // none / vip / big_vip
-  "auto_resolution": "1080P60",   // highest tier that auto actually resolves to under current permissions (highest by qn)
-  "available_qualities": [
-    { "qn": 112, "label": "1080P60", "codecs": ["hvc", "av01", "avc"] },
-    { "qn": 80,  "label": "1080P",   "codecs": ["hvc", "av01", "avc"] },
-    { "qn": 64,  "label": "720P",    "codecs": ["hvc", "av01", "avc"] },
-    { "qn": 32,  "label": "480P",    "codecs": ["hvc", "av01", "avc"] }
-  ],
+    "bvid": "BV1xx411c7mD",
+    "title": "Video Title",
+    "uploader": "Uploader",
+    "duration": 482,
+    "logged_in": true,
+    "vip_type": "big_vip",          // none / vip / big_vip
+    "auto_resolution": "1080P60",   // highest tier that auto actually resolves to under current permissions (highest by qn)
+    "available_qualities": [
+      { "qn": 112, "label": "1080P 高码率", "format_id": "100027", "codec": "av01", "size": "123.4 MB" },
+      { "qn": 80,  "label": "1080P 高清",   "format_id": "100036", "codec": "hev1", "size": "50.2 MB" },
+      { "qn": 64,  "label": "720P 准高清",  "format_id": "30066",  "codec": "hev1", "size": "30.1 MB" },
+      { "qn": 32,  "label": "480P 标清",    "format_id": "30032",  "codec": "avc1", "size": "20.0 MB" }
+    ],
     "pages": [
       { "cid": 1234567, "page": 1, "title": "Part 1 Title", "part": 1 }
     ]
@@ -62,10 +63,11 @@ Response:
 }
 ```
 - `available_qualities` has already been filtered by the current cookie permissions; `auto_resolution` = the highest `qn` among them
+- `label` is **yt-dlp's own display name** for the tier (e.g. `4K 超高清`, `HDR 真彩`); tiers may reuse the same label at different qn/codec
+- Each tier carries a single **bound `format_id`** chosen by the backend per the request's `codec` preference (one concrete yt-dlp stream per tier → the frontend just displays and passes it back, no codec math); `codec` is the family that won the binding, `size` is a human-readable estimate
 - Grouped by **qn (Bilibili quality code)**: 1080P and 1080P60 (high frame rate, qn=112/116) are listed separately (yt-dlp reports the same height/fps for both, so they can only be distinguished by qn)
-- `codecs` are sorted by codec preference `hvc > av01 > avc` (HEVC > AV1 > H.264)
 - Login state differences are prefetched by the backend (tiers lacking permission are excluded from the list), so the frontend does not need to gray them out; the unauthenticated list generally only goes up to 480P
-- **Bangumi seasons** (`/bangumi/play/ss…`): yt-dlp returns a playlist, so `pages` contains one entry **per episode** with a `url` field pointing at that episode's `/bangumi/play/ep…` link; `title` is the season name and `available_qualities` is unioned across the resolved episodes. Single `ep` links behave like a one-part video (no `url` on the single page entry).
+- **Bangumi seasons** (`/bangumi/play/ss…`): yt-dlp returns a playlist, so `pages` contains one entry **per episode** with a `url` field pointing at that episode's `/bangumi/play/ep…` link; `title` is the season name and `available_qualities` (and its bound `format_id`) is unioned across the resolved episodes. Single `ep` links behave like a one-part video (no `url` on the single page entry).
 - Request failure (network / invalid URL): `code=-2, msg="parse failed"`; invalid cookies: `code=-3`
 
 ## 3. Start a Download
@@ -78,13 +80,15 @@ Request:
   "pages": [ 1, 2, 3 ],              // parts to download; if omitted, defaults to the current part only
   "urls": ["https://www.bilibili.com/bangumi/play/ep32374"],  // optional; one ep URL per page, used for bangumi seasons
   "quality": "auto",                 // auto | 8K | 4K | 2K | 1080P60 | 1080P | 720P60 | 720P | 480P | 360P | NNNP | audio
-  "codec": "auto",                   // codec preference order: auto (default hvc>av01>avc) or comma-separated e.g. "avc,hvc,av01"
+  "codec": "auto",                   // codec preference order: auto (default hev1>hvc1>av01>avc1) or comma-separated yt-dlp vcodec prefixes e.g. "avc1,hev1,hvc1"
+  "format_id": "100036",             // optional; the backend-bound stream picked at /api/info time ("" for auto / audio)
   "audio_only": false,               // set to true when quality=audio
   "cookies": "SESSDATA=...; DedeUserID=...; bili_jct=...",  // may be empty
   "overwrite": false,
   "title": "Video Title"                 // for display; job title = "{title} P{n}"
 }
 ```
+- `format_id` is optional and takes priority when present: the download uses `{format_id}+bestaudio` with a `/`-fallback to the height+codec expression recorded at probe time (and finally `best`), which keeps season batch downloads working when one episode lacks that exact id. Leave it empty for `auto`/`audio`.
 - `urls` (optional) is parallel to `pages`: when provided, each job uses `urls[i]` as its download URL instead of `with_page(url, pages[i])`. Season pages populate it with each selected episode's `/bangumi/play/ep…` URL (returned by `/api/info`); ordinary multi-part videos keep using the `?p=N` mechanism and leave it empty.
 Response:
 ```json
@@ -202,7 +206,7 @@ The floating panel displays read-only backend info (backend config cannot be cha
   }
 }
 ```
-> Userscript-side settings (backend URL / token / default quality) belong to browser-side storage and are not read/written through this endpoint.
+> `download_dir`/`staging_dir` are the **runtime paths inside the process** (Docker: `/app/downloads` / `/app/data/.parts`; source run: project-root-relative). They are informational; the host-side location of the Docker volumes is decided by `compose.yaml` / `BLDLP_DOWNLOAD_DIR_HOST`, not by this endpoint. Userscript-side settings (backend URL / token / codec preference) belong to browser-side storage and are not read/written through this endpoint.
 
 ## 8. Error Codes
 

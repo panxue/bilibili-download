@@ -87,11 +87,11 @@ class TestCreateJob:
         job = m.create_job(
             url="https://www.bilibili.com/video/BV1xx", bvid="BV1xx", page=1,
             title="P1", quality="auto",
-            params={"cookies": "SESSDATA=secret", "codec": "avc", "overwrite": True},
+            params={"cookies": "SESSDATA=secret", "codec": "avc1", "overwrite": True},
         )
         row = m.db.get(job.id)
         assert "cookies" not in row["params"]
-        assert row["params"]["codec"] == "avc"
+        assert row["params"]["codec"] == "avc1"
         assert row["params"]["overwrite"] is True
         assert "secret" not in __import__("json").dumps(row)
 

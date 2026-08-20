@@ -20,13 +20,13 @@ A video download tool for Bilibili: **userscript (frontend floating panel) + loc
 |------|------|------|
 | F1 | Floating panel injection | Capsule in the bottom-right corner of the player page + 320px panel, Shadow DOM style isolation |
 | F2 | Video info parsing | Reads `window.__INITIAL_STATE__` (legacy pages) or `playurlSSRData`+`og:title` (modern SSR bangumi) from the page: title/UP/BV/parts; quality + full episode list (for season URLs) via backend `POST /api/info` |
-| F3 | Quality selection | Quality buttons driven by `/api/info.available_qualities` data (grouped by qn, including high-frame-rate tiers 1080P60/720P60), default `Auto (highest tier)`; codec preference order configurable (`hvc>av01>avc` default, changeable in settings panel) |
+| F3 | Quality selection | Quality buttons driven by `/api/info.available_qualities` data (yt-dlp tier labels grouped by qn, each carrying a backend-bound `format_id`), default `Auto (highest tier)`; codec preference order configurable (`hev1>hvc1>av01>avc1` default, changeable in settings panel) |
 | F4 | Start download | Submit per part → backend creates SQLite job → queue concurrency (default 2) |
 | F5 | Real-time progress | Backend pushes progress (percent/speed/eta/phase) via a single global SSE (`/api/jobs/stream`); the floating panel event bar refreshes in real time, with auto polling fallback on disconnect |
 | F6 | Job management | Job list view: pause/resume, cancel, resume (after power loss/failure), delete |
 | F7 | Interrupted download resume | `.part` segmented staging directory + SQLite-persisted job + `interrupted → resume` |
 | F8 | Logged-in / not-logged-in dual mode | Login badge, quality tiers linked to permissions (insufficient-permission tiers excluded from the list), low-quality downgrade fallback |
-| F9 | Settings panel | In-panel settings: backend URL/token/default quality/codec preference (GM persistence) |
+| F9 | Settings panel | In-panel settings: backend URL/token/codec preference (GM persistence) |
 | F10 | Backend configuration | TOML config file: download directory, ffmpeg path, concurrency, template, proxy, token |
 
 ### 3.2 First Release (Excluded, Later Iterations)

@@ -3,11 +3,17 @@ from backend.downloader import _PROBE_CACHE, _probe_season, parse_probe, probe_i
 
 def formats(*qualities):
     f = []
-    qn_map = {80: (1080, "hvc1"), 112: (1080, "hvc1"), 116: (1080, "av01"),
-              74: (720, "avc1"), 64: (720, "av01"), 32: (480, "avc1"), 16: (360, "avc1")}
+    qn_map = {80: (1080, "hvc1", "1080P 高清", 150 * 1024 * 1024),
+              112: (1080, "hvc1", "1080P 高码率", 180 * 1024 * 1024),
+              116: (1080, "av01", "1080P 高码率", 90 * 1024 * 1024),
+              74: (720, "avc1", "720P 高清", 80 * 1024 * 1024),
+              64: (720, "av01", "720P 准高清", 60 * 1024 * 1024),
+              32: (480, "avc1", "480P 标清", 40 * 1024 * 1024),
+              16: (360, "avc1", "360P 流畅", 20 * 1024 * 1024)}
     for qn in qualities:
-        h, vc = qn_map[qn]
-        f.append({"quality": qn, "height": h, "vcodec": f"{vc}." + "1" * 8})
+        h, vc, name, size = qn_map[qn]
+        f.append({"quality": qn, "height": h, "vcodec": f"{vc}." + "1" * 8,
+                  "format_id": f"id{qn}", "format": name, "filesize_approx": size})
     return f
 
 
@@ -25,16 +31,17 @@ class TestParseProbe:
         data = minimal_data(formats(80, 64, 32))
         out = parse_probe(data, "https://www.bilibili.com/video/BV1xx411c7mD", False)
         labels = [q["label"] for q in out["available_qualities"]]
-        assert labels == ["1080P", "720P", "480P"]
-        assert out["auto_resolution"] == "1080P"
+        assert labels == ["1080P 高清", "720P 准高清", "480P 标清"]
+        assert out["auto_resolution"] == "1080P 高清"
         assert out["logged_in"] is False
 
-    def test_high_fps_and_higher_tiers_separated_by_qn(self):
+    def test_multiple_codecs_per_tier_grouped_by_qn(self):
         data = minimal_data(formats(112, 80, 116, 74, 64, 32))
         out = parse_probe(data, "url", True)
         labels = [q["label"] for q in out["available_qualities"]]
-        assert labels == ["1080P60", "1080P60", "1080P", "720P60", "720P", "480P"]
-        assert out["auto_resolution"] == "1080P60"
+        assert labels == ["1080P 高码率", "1080P 高码率", "1080P 高清",
+                          "720P 高清", "720P 准高清", "480P 标清"]
+        assert out["auto_resolution"] == "1080P 高码率"
         assert out["logged_in"] is True
 
     def test_codecs_sorted_by_preference(self):
@@ -44,7 +51,17 @@ class TestParseProbe:
              {"quality": 80, "height": 1080, "vcodec": "hev1.1.6"}]
         )
         out = parse_probe(data, "url", False)
-        assert out["available_qualities"][0]["codecs"] == ["hvc", "av01", "avc"]
+        assert out["available_qualities"][0]["codecs"] == ["hev1", "av01", "avc1"]
+
+    def test_quality_size_human_readable(self):
+        data = minimal_data(formats(80, 32))
+        out = parse_probe(data, "url", False)
+        sizes = {q["label"]: q["size"] for q in out["available_qualities"]}
+        assert len(sizes) == 2
+        for label in ("1080P 高清", "480P 标清"):
+            v = sizes[label]
+            assert v.endswith("MB")
+            assert float(v[:-2]) > 0
 
     def test_without_formats(self):
         out = parse_probe(minimal_data([]), "url", False)
@@ -73,7 +90,7 @@ class TestParseProbe:
         assert out["bvid"] == "1733"
         assert out["title"] == "罗小黑战记"
         assert out["duration"] == 600
-        assert [q["label"] for q in out["available_qualities"]] == ["1080P", "480P"]
+        assert [q["label"] for q in out["available_qualities"]] == ["1080P 高清", "480P 标清"]
         assert out["pages"] == [
             {"cid": "32374", "page": 1, "title": "1 喵",
              "url": "https://www.bilibili.com/bangumi/play/ep32374"},
@@ -126,7 +143,7 @@ class TestSeasonProbe:
         assert info["pages"][0]["url"] == "https://www.bilibili.com/bangumi/play/ep32374"
         # flat entries carry no title, so the fallback label is the plain EP number
         assert info["pages"][0]["title"] == "EP 1"
-        assert [q["label"] for q in info["available_qualities"]] == ["1080P", "480P"]
+        assert [q["label"] for q in info["available_qualities"]] == ["1080P 高清", "480P 标清"]
         assert (url, False) in _PROBE_CACHE
         # cached revisit must not hit yt-dlp again
         calls = []

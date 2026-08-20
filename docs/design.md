@@ -44,6 +44,7 @@ cookie only sends SESSDATA/DedeUserID/bili_jct                │ to_thread
 - asyncio queue, `max_concurrent` (default 2) concurrent slots
 - Each job calls the **yt-dlp library** (`yt_dlp.YoutubeDL`) in an independent thread (`asyncio.to_thread`) to download/merge
 - Library params (`format/outtmpl/paths/cookiefile/proxy/...`) see [state-lifecycle.md](state-lifecycle.md); progress is written back to state via `progress_hooks` structured callbacks; during the merge stage, `postprocessor_hooks` marks `phase=merging`
+- **Quality binding**: `/api/info` resolves yt-dlp formats into quality tiers (grouped by qn, label = yt-dlp's own display name) and, per the request's `codec` preference, binds each tier to one concrete `format_id`; the `format_id → height+codec fallback` is cached in the process-level `_FORMAT_TABLE` so a download can fall back when an episode lacks that exact id
 - Throttled every 0.5s: scans the job state table and incrementally broadcasts all jobs via **a single global SSE (`/api/jobs/stream`)** (change detection based on snapshot comparison)
 
 ### 2.4 Persistence `backend/db.py`
@@ -57,7 +58,7 @@ cookie only sends SESSDATA/DedeUserID/bili_jct                │ to_thread
 Floating Panel           FastAPI               downloader        yt-dlp library      SQLite
   ──┘                      │                      │                │                │
   1 GET /api/health ········▶  (probe; returns version, login-state-independent)
-  2 POST /api/info ────────▶  extract_info(download=False) ─▶ quality list ─▶ returns title/quality list/logged_in; for bangumi seasons, also the per-episode page list (ep URLs) from the playlist resolution
+  2 POST /api/info ────────▶  extract_info(download=False) ─▶ quality list ─▶ bind format_id per codec preference ─▶ returns title/quality list/logged_in; for bangumi seasons, also the per-episode page list (ep URLs) from the playlist resolution
   3 POST /api/download ──▶ create job(write DB) ─▶ enqueue to_thread ─▶ download+merge ─▶ update status(write DB)
   4 GET /api/jobs/stream (SSE,EventSource) ◀─ global progress/final-state event broadcast ◀── progress_hooks callback
   5 after completion, the floating panel shows the result; after power-loss restart scan → interrupted → POST resume to resume
