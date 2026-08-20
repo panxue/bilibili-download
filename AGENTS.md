@@ -49,7 +49,7 @@ docker compose up -d          # uses the published Docker Hub image (idevlife/bi
 # docker compose pull:          update the image to a newer published tag
 ```
 
-> The Docker image uses official PyPI by default; the mirror is a build-time override via `UV_DEFAULT_INDEX` / `PIP_INDEX_URL` build args (compose reads them from `.env`), never hardcoded in the repo. On `main`, CI builds and pushes the image to Docker Hub (`<user>/bilibili-download`).
+> The Docker image uses official PyPI by default; the mirror is a build-time override via `UV_DEFAULT_INDEX` / `PIP_INDEX_URL` build args (compose reads them from `.env`), never hardcoded in the repo. On `main`, CI builds and pushes a **multi-arch (amd64 + arm64)** image to Docker Hub (`<user>/bilibili-download`).
 
 Runtime prerequisites (already installed locally): Python 3.12+ / uv, Tampermonkey/Violentmonkey (browser). yt-dlp is a uv library dependency (not a PATH bin); ffmpeg needs `apt install ffmpeg` for source runs, the Docker image ships imageio-ffmpeg.
 

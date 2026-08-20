@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — 2026-08-20 — Multi-arch image (amd64 + arm64) + digest versioned tags
+
+- Docker Hub image is now a multi-arch manifest (linux/amd64 + linux/arm64) built with buildx + QEMU, so Apple Silicon Macs get an arm64 build on pull; the version tag is read from pyproject.toml at CI time instead of being hardcoded (see docs/iterations/1.2.0.md).
+
 ## 1.1.0 — 2026-08-20 — Docker Hub publish + env-driven package index
 
 - Docker image now built and pushed to Docker Hub by CI on `main`; the Tsinghua mirror is no longer hardcoded anywhere in the repo — package index (uv/pip) defaults to official PyPI and is overridable via `UV_DEFAULT_INDEX`/`PIP_INDEX_URL` build args (see docs/iterations/1.1.0.md).

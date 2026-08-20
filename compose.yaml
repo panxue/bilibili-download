@@ -10,7 +10,7 @@ services:
         # PIP_INDEX_URL in .env (or the shell) to override, e.g. a China mirror.
         UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
-    image: idevlife/bilibili-download:${BLDLP_IMAGE_TAG:-1.1.0}
+    image: idevlife/bilibili-download:${BLDLP_IMAGE_TAG:-1.2.0}
     container_name: bilibili-download
     ports:
       # Expose to the host on loopback only, matching the default host=127.0.0.1; LAN access requires 0.0.0.0 + BLDLP_TOKEN

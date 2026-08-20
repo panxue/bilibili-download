@@ -84,8 +84,8 @@ Floating Panel           FastAPI               downloader        yt-dlp library 
 
 > The container is just **one way to run the backend locally**: `docker compose up -d` is equivalent to `start.sh`.
 > Dependency governance: uv.lock not committed; builder uses `uv sync --no-install-project --no-dev` to resolve pyproject.toml in real time.
-> Distribution: `docker compose build: .` builds in place; on `main` CI also builds and publishes the image to Docker Hub (`<user>/bilibili-download:latest` + version tag).
-> Package index: **official PyPI by default, overridable via build args** (`UV_DEFAULT_INDEX` for the uv layer, `PIP_INDEX_URL` for the pip layer) — no China-specific source is hardcoded in the repo; compose passes them through from `.env`; **ffmpeg uses the pip package `imageio-ffmpeg`** (bundled static binary, bypasses apt's 133MB download), symlinked to `/usr/local/bin/ffmpeg`.
+> Distribution: `docker compose build: .` builds in place; on `main` CI also builds and publishes the image to Docker Hub (`<user>/bilibili-download:latest` + version tag) as a **multi-arch manifest (linux/amd64 + linux/arm64)** via buildx + QEMU — Apple Silicon Macs pull the arm64 build automatically on `docker pull` / `docker compose pull`.
+> Package index: **official PyPI by default, overridable via build args** (`UV_DEFAULT_INDEX` for the uv layer, `PIP_INDEX_URL` for the pip layer) — no China-specific source is hardcoded in the repo; compose passes them through from `.env`; **ffmpeg uses the pip package `imageio-ffmpeg`** (bundled static binary, bypasses apt's 133MB download), symlinked to `/usr/local/bin/ffmpeg`. The image is architecture-native: python/uv base images and every pinned wheel (imageio-ffmpeg ships `manylinux2014_aarch64`) exist for both arm64 and amd64.
 
 ```dockerfile
 # Build args (optional): override for mirrored networks, e.g. a China mirror

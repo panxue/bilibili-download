@@ -28,7 +28,7 @@ docker compose pull
 docker compose up -d
 ```
 
-- Uses the published Docker Hub image (`idevlife/bilibili-download`); `docker compose pull` updates it later
+- Uses the published Docker Hub image (`idevlife/bilibili-download`, **multi-arch amd64 + arm64** — works on Intel and Apple Silicon); `docker compose pull` updates it later
 - `docker compose up -d --build` / `docker compose build` only make sense from a repo checkout (they need the Dockerfile + mirror build args)
 - If your network blocks the default PyPI, download the Dockerfile too and set the mirror index in `.env` before building:
   `curl -sSL -o Dockerfile https://raw.githubusercontent.com/panxue/bilibili-download/main/Dockerfile`
