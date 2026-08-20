@@ -84,23 +84,29 @@ Floating Panel           FastAPI               downloader        yt-dlp library 
 
 > The container is just **one way to run the backend locally**: `docker compose up -d` is equivalent to `start.sh`.
 > Dependency governance: uv.lock not committed; builder uses `uv sync --no-install-project --no-dev` to resolve pyproject.toml in real time.
-> No image registry dependency: compose `build: .` builds in place, artifacts stored only locally.
-> Network mirrors: apt/PyPI use Tsinghua mirrors; **ffmpeg uses the pip package `imageio-ffmpeg`** (bundled static binary, bypasses apt's 133MB download), symlinked to `/usr/local/bin/ffmpeg`.
+> Distribution: `docker compose build: .` builds in place; on `main` CI also builds and publishes the image to Docker Hub (`<user>/bilibili-download:latest` + version tag).
+> Package index: **official PyPI by default, overridable via build args** (`UV_DEFAULT_INDEX` for the uv layer, `PIP_INDEX_URL` for the pip layer) — no China-specific source is hardcoded in the repo; compose passes them through from `.env`; **ffmpeg uses the pip package `imageio-ffmpeg`** (bundled static binary, bypasses apt's 133MB download), symlinked to `/usr/local/bin/ffmpeg`.
 
 ```dockerfile
+# Build args (optional): override for mirrored networks, e.g. a China mirror
+ARG UV_DEFAULT_INDEX=https://pypi.org/simple
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
 # Stage 1 — uv dependency layer: produces /app/.venv
 # Use the same python:3.14-slim as the runtime as the builder, ensuring .venv's bin/python
 # symlink points to /usr/local/bin/python3.14; the link survives COPY to the runtime layer.
 FROM python:3.14-slim AS builder
+ARG UV_DEFAULT_INDEX
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uv/bin/uv
-ENV PATH="/uv/bin:$PATH" UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"
+ENV PATH="/uv/bin:$PATH" UV_DEFAULT_INDEX=${UV_DEFAULT_INDEX}
 WORKDIR /app
 COPY pyproject.toml ./
 RUN uv sync --no-install-project --no-dev
 
 # Stage 2 — runtime layer
 FROM python:3.14-slim
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
+ARG PIP_INDEX_URL
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} \
         -U "imageio-ffmpeg==0.6.0" \
     && ln -sf "$(python -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())")" /usr/local/bin/ffmpeg
 WORKDIR /app
@@ -113,7 +119,7 @@ CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 `compose.yaml` key points:
 - Port maps only to loopback `127.0.0.1:8000:8000` (consistent with the default host=127.0.0.1 security baseline; LAN requires 0.0.0.0 with `BLDLP_TOKEN`)
 - Volume mapping `./downloads:/app/downloads` and `./data:/app/data`: mp4 artifacts, SQLite, cookie.txt, `.part` breakpoints all persisted
-- `env_file: .env` (optional, not committed) passes through `BLDLP_TOKEN`/`BLDLP_CONCURRENT`/`BLDLP_PROXY`
+- `env_file: .env` (optional, not committed) passes through `BLDLP_TOKEN`/`BLDLP_CONCURRENT`/`BLDLP_PROXY`; `build.args` reads `UV_DEFAULT_INDEX`/`PIP_INDEX_URL` from the same `.env`
 - The container runs as **root** (local single-user; no volume permission coordination burden)
 
 ### 6.1 Common Operations

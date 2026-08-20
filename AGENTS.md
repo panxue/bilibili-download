@@ -30,7 +30,7 @@ uv run ruff check backend/    # Lint (dev dependency group)
 uv run pytest                 # Unit tests (backend/tests/, 46 cases)
 ```
 
-> When the network is restricted, dependencies install via the Tsinghua PyPI mirror: the default index is pinned in `pyproject.toml` under `[[tool.uv.index]]`; for one-off use run with `UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"`. CI (`.github/workflows/ci.yml`) overrides with `UV_DEFAULT_INDEX=https://pypi.org/simple` on overseas runners.
+> When the network is restricted, dependencies install via a mirror: the repo **does not hardcode any package source** — uv defaults to the official PyPI; for China use set `UV_DEFAULT_INDEX="https://pypi.tuna.tsinghua.edu.cn/simple"` in the shell (e.g. `.envrc`) before `uv sync` / `uv add`.
 
 **Local startup**:
 
@@ -45,7 +45,10 @@ uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```bash
 docker compose up -d --build
 # Optional: cp .env.example .env and set BLDLP_TOKEN / BLDLP_PROXY as needed
+# In China, also set UV_DEFAULT_INDEX / PIP_INDEX_URL in .env to the Tsinghua mirror for the image build
 ```
+
+> The Docker image uses official PyPI by default; the mirror is a build-time override via `UV_DEFAULT_INDEX` / `PIP_INDEX_URL` build args (compose reads them from `.env`), never hardcoded in the repo. On `main`, CI builds and pushes the image to Docker Hub (`<user>/bilibili-download`).
 
 Runtime prerequisites (already installed locally): Python 3.12+ / uv, Tampermonkey/Violentmonkey (browser). yt-dlp is a uv library dependency (not a PATH bin); ffmpeg needs `apt install ffmpeg` for source runs, the Docker image ships imageio-ffmpeg.
 
@@ -57,7 +60,7 @@ Runtime prerequisites (already installed locally): Python 3.12+ / uv, Tampermonk
 ├── Dockerfile                # multi-stage image (uv dependency layer + pip runtime imageio-ffmpeg)
 ├── compose.yaml              # docker compose start/stop (loopback port + downloads/data volumes)
 ├── .env.example              # container env example (BLDLP_TOKEN / PROXY / CONCURRENT)
-├── .github/workflows/ci.yml  # ruff + pytest (Python 3.12/3.14 matrix)
+├── .github/workflows/ci.yml  # ruff + pytest (Python 3.12/3.14 matrix) + Docker build/push to Docker Hub on main
 ├── backend/
 │   ├── config.example.toml   # config example (config.toml not committed)
 │   ├── config.py             # TOML + env config loading

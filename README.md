@@ -15,7 +15,7 @@ Two ways to run, pick one: **Docker (recommended, no dependencies to install)** 
 ```bash
 cd bilibili-download && docker compose up -d --build
 # Optional: cp .env.example .env   and set BLDLP_TOKEN / BLDLP_PROXY as needed
-# Image: pip installs yt-dlp + imageio-ffmpeg (static ffmpeg), dependencies go through the Tsinghua mirror
+# Image: pip installs yt-dlp + imageio-ffmpeg (static ffmpeg), npm-style package index set via .env (official PyPI by default)
 ```
 
 ### Option B: Source
@@ -67,7 +67,7 @@ bilibili-download/
 ├── Dockerfile               # multi-stage image (uv dependency layer + pip runtime)
 ├── compose.yaml             # docker compose start/stop (loopback port + data volumes)
 ├── .dockerignore            # build-context exclusions
-├── .env.example             # container env example (BLDLP_TOKEN / PROXY / CONCURRENT)
+├── .env.example             # container env example (BLDLP_TOKEN / PROXY / CONCURRENT / mirror override)
 ├── start.sh                 # one-shot startup (uv sync + uvicorn)
 ├── backend/
 │   ├── config.example.toml # config example
@@ -92,4 +92,4 @@ bilibili-download/
 | ffmpeg | Audio/video merging | `apt install ffmpeg` (source run) or imageio-ffmpeg in the image |
 | Tampermonkey | Userscript runtime | browser extension |
 
-> Two run modes: Docker container (image based on `python:3.14-slim` + Tsinghua mirror, ships yt-dlp/ffmpeg, artifacts land in `downloads/` via volume) or local source. See [docs/design.md](docs/design.md).
+> Two run modes: Docker container (image based on `python:3.14-slim`, official PyPI by default with an `.env` mirror override, ships yt-dlp/ffmpeg, artifacts land in `downloads/` via volume) or local source. See [docs/design.md](docs/design.md).

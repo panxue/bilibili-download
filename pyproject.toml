@@ -1,6 +1,6 @@
 [project]
 name = "bilibili-download"
-version = "1.0.0"
+version = "1.1.0"
 description = "Bilibili video downloader: userscript floating panel + FastAPI backend + yt-dlp"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,10 +11,6 @@ dependencies = [
 
 [tool.uv]
 package = false
-
-[[tool.uv.index]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
-default = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

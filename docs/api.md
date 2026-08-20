@@ -19,8 +19,8 @@ Used by the floating panel to determine whether the backend is online.
   "code": 0,
   "data": {
     "ok": true,
-    "version": "0.1.0",
-    "yt_dlp": "2026.07.04",
+    "version": "1.1.0",
+    "yt_dlp": "2026.08.19",
     "ffmpeg": true,
     "max_concurrent": 2
   }
@@ -195,7 +195,7 @@ The floating panel displays read-only backend info (backend config cannot be cha
     "subdir_by_uploader": true,
     "proxy": "",
     "auth_token_required": false,
-    "yt_dlp_version": "2026.07.04"
+    "yt_dlp_version": "2026.08.19"
   }
 }
 ```

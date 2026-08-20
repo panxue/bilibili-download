@@ -1,6 +1,12 @@
 services:
   backend:
-    build: .
+    build:
+      context: .
+      args:
+        # Package index for pip/uv inside the image. Default official PyPI; set UV_DEFAULT_INDEX /
+        # PIP_INDEX_URL in .env (or the shell) to override, e.g. a China mirror.
+        UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
     image: bilibili-download:latest
     container_name: bilibili-download
     ports:

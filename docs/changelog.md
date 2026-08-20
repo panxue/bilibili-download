@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-08-20 — Docker Hub publish + env-driven package index
+
+- Docker image now built and pushed to Docker Hub by CI on `main`; the Tsinghua mirror is no longer hardcoded anywhere in the repo — package index (uv/pip) defaults to official PyPI and is overridable via `UV_DEFAULT_INDEX`/`PIP_INDEX_URL` build args (see docs/iterations/1.1.0.md).
+
 ## 1.0.0 — 2026-08-19 — Initial public release
 
 - First public release: code and docs fully translated to English, version pinned to 1.0.0 (pyproject / userscript / /api/health), LICENSE (MIT) added, git history squashed to a single commit, repo made public (see docs/iterations/1.0.0.md).
