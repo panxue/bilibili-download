@@ -24,6 +24,15 @@ def is_bangumi_season(url: str) -> bool:
     return bool(re.search(r"/bangumi/play/ss[0-9]+/?$", parts.path))
 
 
+def is_bangumi_url(url: str) -> bool:
+    """True for any bangumi play URL (season ss or episode ep)."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    return "bilibili.com" in parts.netloc and bool(_BANGUMI_PLAY.search(parts.path))
+
+
 def with_page(url: str, page: int) -> str:
     """Point a multi-part video URL at the given part (?p=N)."""
     parts = urlsplit(url)

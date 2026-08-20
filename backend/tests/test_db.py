@@ -104,3 +104,22 @@ class TestCreateJob:
         row = m.db.get(job.id)
         assert "cookies" not in row["params"]
         assert "cookie_extra" not in row["params"]
+
+    def test_subdir_template_uses_series_season_for_bangumi(self, tmp_path):
+        m = make_manager(tmp_path)
+        job = m.create_job(
+            url="https://www.bilibili.com/bangumi/play/ep32374", bvid="ep32374",
+            page=1, title="罗小黑战记 P1", quality="auto", params={},
+        )
+        params = m._build_params(job)
+        tpl = params["outtmpl"]
+        assert "%(series)s/%(season)s/" in tpl
+
+    def test_subdir_template_uses_uploader_for_video(self, tmp_path):
+        m = make_manager(tmp_path)
+        job = m.create_job(
+            url="https://www.bilibili.com/video/BV1xx", bvid="BV1xx",
+            page=1, title="P1", quality="auto", params={},
+        )
+        params = m._build_params(job)
+        assert params["outtmpl"].startswith("%(uploader)s/")

@@ -11,7 +11,7 @@ from yt_dlp.utils import DownloadCancelled, DownloadError, format_bytes, formatS
 
 from .config import Settings
 from .db import JobDB, utcnow
-from .urls import is_bangumi_season
+from .urls import is_bangumi_season, is_bangumi_url
 
 logger = logging.getLogger("bilibili.downloader")
 
@@ -288,7 +288,11 @@ class DownloadManager:
         proxy = self.settings.network.get("proxy", "")
         tpl = s["file_template"]
         if s["subdir_by_uploader"]:
-            tpl = f"%(uploader)s/{tpl}"
+            if is_bangumi_url(state.url):
+                # bangumi entries have no uploader ("na"); group by series + season instead
+                tpl = f"%(series)s/%(season)s/{tpl}"
+            else:
+                tpl = f"%(uploader)s/{tpl}"
 
         params = {
             "quiet": True,
