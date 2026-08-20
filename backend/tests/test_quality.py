@@ -1,4 +1,4 @@
-from backend.downloader import _PROBE_CACHE, parse_probe, probe_info
+from backend.downloader import _PROBE_CACHE, _probe_season, parse_probe, probe_info
 
 
 def formats(*qualities):
@@ -110,8 +110,8 @@ class TestSeasonProbe:
             "_type": "playlist",
             "title": "罗小黑战记",
             "entries": [
-                {"id": "32374", "webpage_url": "https://www.bilibili.com/bangumi/play/ep32374", "title": "1 喵"},
-                {"id": "32373", "webpage_url": "https://www.bilibili.com/bangumi/play/ep32373", "title": "2 逃"},
+                {"id": "32374"},
+                {"id": "32373"},
             ],
         }
         sample = {"id": "32374", "formats": formats(80, 32)}
@@ -124,6 +124,8 @@ class TestSeasonProbe:
         assert info["title"] == "罗小黑战记"
         assert len(info["pages"]) == 2
         assert info["pages"][0]["url"] == "https://www.bilibili.com/bangumi/play/ep32374"
+        # flat entries carry no title, so the fallback label is the plain EP number
+        assert info["pages"][0]["title"] == "EP 1"
         assert [q["label"] for q in info["available_qualities"]] == ["1080P", "480P"]
         assert (url, False) in _PROBE_CACHE
         # cached revisit must not hit yt-dlp again
@@ -137,3 +139,23 @@ class TestSeasonProbe:
             info2 = probe_info(settings, url)
         assert info2 == info
         assert calls == []
+
+    def test_probe_season_builds_ep_urls_and_fallback_titles(self, tmp_path):
+        from unittest import mock
+
+        from backend.config import Settings
+
+        settings = Settings(tmp_path / "nonexistent.toml")
+        url = "https://www.bilibili.com/bangumi/play/ss1733"
+
+        with mock.patch("backend.downloader.yt_dlp.YoutubeDL") as ydl:
+            ydl.return_value.extract_info.side_effect = [
+                {"_type": "playlist", "entries": [{"id": "32374"}, {"id": "32373"}]},
+                {"id": "32374", "formats": formats(80, 32)},
+            ]
+            ydl.return_value.__enter__.return_value = ydl.return_value
+            root = _probe_season(settings, url, {})
+        assert root["entries"][0]["title"] == "EP 1"
+        assert root["entries"][1]["title"] == "EP 2"
+        assert root["entries"][0]["webpage_url"] == "https://www.bilibili.com/bangumi/play/ep32374"
+        assert root["formats"]

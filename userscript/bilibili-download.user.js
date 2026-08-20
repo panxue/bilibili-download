@@ -439,8 +439,11 @@
       var cb = el("input", { type: "checkbox", "class": "bdlp-page", value: String(p.page) });
       if (p.page === sel) cb.checked = true;
       if (pages.length === 1) cb.checked = true;
+      var prefix = (pfx || "P") + p.page;
+      var title = (p.title || "").trim();
+      if (title === prefix || title === (pfx + " " + p.page) || title === String(p.page)) title = "";
       label.appendChild(cb);
-      label.appendChild(el("span", { "class": "bdlp-page-title" }, (pfx || "P") + p.page + " · " + (p.title || "")));
+      label.appendChild(el("span", { "class": "bdlp-page-title" }, title ? prefix + " · " + title : prefix));
       box.appendChild(label);
     });
     var allLink = el("a", { href: "#", "class": "bdlp-check" }, "Select all / none");
