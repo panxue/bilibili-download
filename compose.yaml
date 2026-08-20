@@ -1,5 +1,8 @@
 services:
   backend:
+    # Published image from Docker Hub (built & pushed by CI on main).
+    # - docker compose up -d        : uses the pulled image (default; docker compose pull to update)
+    # - docker compose up -d --build: from-source rebuild (tags the local image with the same name)
     build:
       context: .
       args:
@@ -7,14 +10,16 @@ services:
         # PIP_INDEX_URL in .env (or the shell) to override, e.g. a China mirror.
         UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
-    image: bilibili-download:latest
+    image: idevlife/bilibili-download:${BLDLP_IMAGE_TAG:-1.1.0}
     container_name: bilibili-download
     ports:
       # Expose to the host on loopback only, matching the default host=127.0.0.1; LAN access requires 0.0.0.0 + BLDLP_TOKEN
       - "127.0.0.1:8000:8000"
     volumes:
-      # Persist all runtime artifacts: final mp4, SQLite job DB, Netscape cookie, .part resume data
-      - ./downloads:/app/downloads
+      # Host download directory (BLDLP_DOWNLOAD_DIR_HOST, e.g. /mnt/videos/bilibili) → /app/downloads inside the container.
+      # The backend always writes to /app/downloads; which host path that maps to is decided here.
+      - "${BLDLP_DOWNLOAD_DIR_HOST:-./downloads}:/app/downloads"
+      # Persist all runtime artifacts: SQLite job DB, Netscape cookie, .part resume data
       - ./data:/app/data
     env_file:
       - path: .env

@@ -10,13 +10,28 @@ A Bilibili video download tool: userscript floating panel + local FastAPI backen
 
 Two ways to run, pick one: **Docker (recommended, no dependencies to install)** or **source (uv)**.
 
-### Option A: Docker
+### Option A: Docker (no repo clone needed)
 
 ```bash
-cd bilibili-download && docker compose up -d --build
-# Optional: cp .env.example .env   and set BLDLP_TOKEN / BLDLP_PROXY as needed
-# Image: pip installs yt-dlp + imageio-ffmpeg (static ffmpeg), npm-style package index set via .env (official PyPI by default)
+# 1. Grab the two files into an empty directory
+curl -sSL -o compose.yaml  https://raw.githubusercontent.com/panxue/bilibili-download/main/compose.yaml
+curl -sSL -o .env.example  https://raw.githubusercontent.com/panxue/bilibili-download/main/.env.example
+
+# 2. Create .env and set your options (here: download dir + auth token via sed)
+mv .env.example .env
+sed -i 's|^# BLDLP_DOWNLOAD_DIR_HOST=.*|BLDLP_DOWNLOAD_DIR_HOST=/home/you/Videos/bilibili|' .env
+sed -i 's|^# BLDLP_TOKEN=.*|BLDLP_TOKEN=changeme|' .env
+#    Other keys: BLDLP_CONCURRENT (max parallel jobs), BLDLP_PROXY, BLDLP_IMAGE_TAG
+
+# 3. Pull the published image and start (data/ for jobs.db/cookies/.parts is created locally)
+docker compose pull
+docker compose up -d
 ```
+
+- Uses the published Docker Hub image (`idevlife/bilibili-download`); `docker compose pull` updates it later
+- `docker compose up -d --build` / `docker compose build` only make sense from a repo checkout (they need the Dockerfile + mirror build args)
+- If your network blocks the default PyPI, download the Dockerfile too and set the mirror index in `.env` before building:
+  `curl -sSL -o Dockerfile https://raw.githubusercontent.com/panxue/bilibili-download/main/Dockerfile`
 
 ### Option B: Source
 
@@ -42,6 +57,7 @@ uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```bash
 # 5. Install the userscript in your browser (Tampermonkey/Violentmonkey)
 #    Open userscript/bilibili-download.user.js → copy → create a new script and save
+#    Or from a raw URL: https://raw.githubusercontent.com/panxue/bilibili-download/main/userscript/bilibili-download.user.js
 
 # 6. Open any bilibili video page → click the floating download panel at the bottom right
 ```

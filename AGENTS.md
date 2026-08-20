@@ -43,9 +43,10 @@ uv run uvicorn backend.main:app --host 127.0.0.1 --port 8000
 **Docker startup** (optional, no local dependencies needed):
 
 ```bash
-docker compose up -d --build
-# Optional: cp .env.example .env and set BLDLP_TOKEN / BLDLP_PROXY as needed
-# In China, also set UV_DEFAULT_INDEX / PIP_INDEX_URL in .env to the Tsinghua mirror for the image build
+docker compose up -d          # uses the published Docker Hub image (idevlife/bilibili-download)
+# Optional: cp .env.example .env and set BLDLP_TOKEN / BLDLP_PROXY / BLDLP_DOWNLOAD_DIR_HOST as needed
+# docker compose up -d --build: from-source rebuild (passes UV_DEFAULT_INDEX/PIP_INDEX_URL build args from .env)
+# docker compose pull:          update the image to a newer published tag
 ```
 
 > The Docker image uses official PyPI by default; the mirror is a build-time override via `UV_DEFAULT_INDEX` / `PIP_INDEX_URL` build args (compose reads them from `.env`), never hardcoded in the repo. On `main`, CI builds and pushes the image to Docker Hub (`<user>/bilibili-download`).

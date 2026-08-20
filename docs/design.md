@@ -117,8 +117,9 @@ CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 `compose.yaml` key points:
+- Uses the **published Docker Hub image** `idevlife/bilibili-download:<tag>` by default (`docker compose up -d`); `docker compose up -d --build` rebuilds from source and tags the local image with the same name; `docker compose pull` updates to a newer published tag
 - Port maps only to loopback `127.0.0.1:8000:8000` (consistent with the default host=127.0.0.1 security baseline; LAN requires 0.0.0.0 with `BLDLP_TOKEN`)
-- Volume mapping `./downloads:/app/downloads` and `./data:/app/data`: mp4 artifacts, SQLite, cookie.txt, `.part` breakpoints all persisted
+- Download directory is configurable at the host level: `BLDLP_DOWNLOAD_DIR_HOST` (default `./downloads`) maps to `/app/downloads` inside the container; `./data:/app/data` persists SQLite, cookie.txt, `.part` breakpoints
 - `env_file: .env` (optional, not committed) passes through `BLDLP_TOKEN`/`BLDLP_CONCURRENT`/`BLDLP_PROXY`; `build.args` reads `UV_DEFAULT_INDEX`/`PIP_INDEX_URL` from the same `.env`
 - The container runs as **root** (local single-user; no volume permission coordination burden)
 
