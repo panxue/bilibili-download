@@ -426,21 +426,14 @@ def _clean_err(msg: str) -> str:
     return msg
 
 
-def parse_probe(data: dict, url: str, logged_in: bool) -> dict:
-    """Output the quality list grouped by bilibili quality code (qn).
-
-    yt-dlp's bilibili extractor reports fps as 30 for everything (no hfr field), and 1080P vs
-    1080P high-frame-rate share the same height (1080), so they can only be told apart by quality (=qn):
-      80→1080P, 112→1080P60, 116→1080P60, 74→720P60…
-    codec is sorted by hvc>av01>avc preference.
-    """
+def _probe_qualities(formats: list[dict]) -> tuple[list[dict], str]:
+    """Group yt-dlp formats into a bilibili quality list + the auto (highest) label."""
     height_labels = {360: "360P", 480: "480P", 720: "720P", 1080: "1080P", 1440: "2K", 2160: "4K", 4320: "8K"}
     # qn (bilibili quality code) → display label; high-frame-rate tiers (60fps) are separated from the regular ones
     qn_labels = {6: "240P", 16: "360P", 32: "480P", 64: "720P", 74: "720P60",
                  80: "1080P", 112: "1080P60", 116: "1080P60", 120: "4K", 127: "8K"}
 
-    videos = [f for f in data.get("formats", [])
-              if f.get("vcodec") and f.get("vcodec") != "none"]
+    videos = [f for f in formats if f.get("vcodec") and f.get("vcodec") != "none"]
     groups: dict[int, list[dict]] = {}
     for f in videos:
         groups.setdefault(f.get("quality") or 0, []).append(f)
@@ -455,6 +448,37 @@ def parse_probe(data: dict, url: str, logged_in: bool) -> dict:
 
     highest_qn = max(groups, default=0)
     auto = next((q["label"] for q in qualities if q["qn"] == highest_qn), "auto")
+    return qualities, auto
+
+
+def parse_probe(data: dict, url: str, logged_in: bool) -> dict:
+    """Output the quality list grouped by bilibili quality code (qn) and the part list.
+
+    Handles both a single video dict and a bangumi season playlist (`_type == "playlist"`), whose
+    entries become the downloadable parts (one episode URL each). Quality for seasons is unioned
+    across the resolved episode entries.
+    """
+    if data.get("_type") == "playlist":
+        entries = [e for e in (data.get("entries") or []) if isinstance(e, dict)]
+        all_formats = [f for e in entries for f in (e.get("formats") or [])]
+        qualities, auto = _probe_qualities(all_formats)
+        first = entries[0] if entries else {}
+        return {
+            "bvid": data.get("id") or url.rsplit("/", 1)[-1].split("?")[0],
+            "title": data.get("title") or url,
+            "uploader": first.get("uploader") or "",
+            "duration": sum(int(e.get("duration") or 0) for e in entries),
+            "logged_in": logged_in, "vip_type": "none",
+            "auto_resolution": auto, "available_qualities": qualities,
+            "pages": [
+                {"cid": e.get("id", 0), "page": i + 1,
+                 "title": e.get("title") or f"EP{i + 1}",
+                 "url": e.get("webpage_url") or url}
+                for i, e in enumerate(entries)
+            ],
+        }
+
+    qualities, auto = _probe_qualities(data.get("formats", []))
     return {
         "bvid": data.get("id") or "", "title": data.get("title") or url,
         "uploader": data.get("uploader") or "", "duration": int(data.get("duration") or 0),

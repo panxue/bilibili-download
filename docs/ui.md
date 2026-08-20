@@ -65,7 +65,7 @@
 
 ### 3.2 Parse Source Priority
 
-1. Read `unsafeWindow.__INITIAL_STATE__` locally (title/BV/parts, zero latency; the userscript sandbox needs `unsafeWindow` to bypass isolation)
+1. Read page metadata locally: `unsafeWindow.__INITIAL_STATE__` (legacy pages) or `playurlSSRData`+`og:title` (modern SSR bangumi, title/BV/current-ep, zero latency; the userscript sandbox needs `unsafeWindow` to bypass isolation)
 2. Quality list / login state permissions → backend `POST /api/info` (with the current three cookie keys)
 3. Backend unreachable → keep the default structure, yellow bar at the top showing "Backend unreachable, quality not verified" (no downgrade of preset tiers, to avoid misleadingly selecting an unavailable tier)
 
@@ -113,7 +113,7 @@ One card row per job:
 ```
 1. Enter the play page document-idle → inject capsule (connecting)
 2. GET /api/health → green dot ready (failure→red dot + tooltip "Please run uv run uvicorn ...")
-3. Click capsule → expand → parse __INITIAL_STATE__ → spinner→form; in parallel POST /api/info to fill in qualities
+3. Click capsule → expand → parse __INITIAL_STATE__ / playurlSSRData (bangumi) → spinner→form; in parallel POST /api/info to fill in qualities (and the full episode list for a season URL)
 4. User picks a tier → click "Start download" → POST /api/download → get jobs[] → auto switch to Tab2
 5. Tab2 opens a single global `EventSource(/api/jobs/stream)` → dispatch real-time progress/terminal state by job_id
 6. Exceptions: SSE drops → poll; backend 400/4xx → red bar with the reason

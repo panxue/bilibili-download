@@ -56,3 +56,27 @@ class TestParseProbe:
             {"cid": 1001, "page": 1, "title": "P1"},
             {"cid": 1002, "page": 2, "title": "P2"},
         ]
+
+    def test_season_playlist_maps_episodes_to_pages_with_url(self):
+        data = {
+            "_type": "playlist",
+            "id": "1733",
+            "title": "罗小黑战记",
+            "entries": [
+                {"id": "32374", "title": "1 喵", "webpage_url": "https://www.bilibili.com/bangumi/play/ep32374",
+                 "duration": 300, "formats": formats(80, 32)},
+                {"id": "32373", "title": "2 逃", "webpage_url": "https://www.bilibili.com/bangumi/play/ep32373",
+                 "duration": 300, "formats": formats(80, 32)},
+            ],
+        }
+        out = parse_probe(data, "https://www.bilibili.com/bangumi/play/ss1733", False)
+        assert out["bvid"] == "1733"
+        assert out["title"] == "罗小黑战记"
+        assert out["duration"] == 600
+        assert [q["label"] for q in out["available_qualities"]] == ["1080P", "480P"]
+        assert out["pages"] == [
+            {"cid": "32374", "page": 1, "title": "1 喵",
+             "url": "https://www.bilibili.com/bangumi/play/ep32374"},
+            {"cid": "32373", "page": 2, "title": "2 逃",
+             "url": "https://www.bilibili.com/bangumi/play/ep32373"},
+        ]

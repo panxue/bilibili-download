@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Bilibili yt-dlp Downloader
 // @namespace    https://github.com/panxue/bilibili-download
-// @version      1.2.0
+// @version      1.3.0
 // @description  Bilibili video download: a floating panel that submits jobs to a local FastAPI+yt-dlp backend, with realtime progress and interrupted-download resume
 // @match        https://www.bilibili.com/*
 // @run-at       document-idle
@@ -43,22 +43,65 @@
 
   function pageMeta() {
     var st = initialState();
-    if (!st) return null;
-    var vd = st.videoData || st.videoInfo;
-    if (!vd) return null;
-    var pages = (vd.pages || []).map(function (p, i) {
+    if (st) {
+      var vd = st.videoData || st.videoInfo;
+      if (vd) {
+        var pages = (vd.pages || []).map(function (p, i) {
+          return {
+            page: p.page || i + 1,
+            cid: p.cid || 0,
+            title: p.part || vd.title || ("P" + (i + 1)),
+          };
+        });
+        return {
+          bvid: vd.bvid || "",
+          title: vd.title || "",
+          uploader: (vd.owner && vd.owner.name) || "",
+          pages: pages,
+        };
+      }
+    }
+    return bangumiMeta();
+  }
+
+  // Modern bangumi pages (play-v2 / laputa SSR) no longer expose __INITIAL_STATE__; the
+  // currently-playing episode lives in playurlSSRData and the season name in <meta og:title>.
+  function bangumiMeta() {
+    var path = location.pathname;
+    var m = path.match(/\/bangumi\/play\/(ss|ep)([0-9]+)$/);
+    if (!m) return null;
+    var kind = m[1], id = m[2];
+    var arc = null, epInfo = null, seasonTitle = "";
+    var d = unsafeWindow.playurlSSRData;
+    if (d && d.data && d.data.result) {
+      arc = d.data.result.arc || null;
+      epInfo = (d.data.result.supplement && d.data.result.supplement.ogv_episode_info) || null;
+    }
+    var og = document.querySelector('meta[property="og:title"]');
+    if (og && og.content) seasonTitle = og.content.trim();
+    var title = seasonTitle || document.title.split("-")[0].trim() || ("Pgc " + id);
+    if (kind === "ep") {
       return {
-        page: p.page || i + 1,
-        cid: p.cid || 0,
-        title: p.part || vd.title || ("P" + (i + 1)),
+        bvid: (arc && arc.bvid) || ("ep" + id),
+        title: title,
+        uploader: "",
+        pages: [{ page: 1, cid: (arc && arc.cid) || 0, title: epTitleLabel(epInfo) }],
       };
-    });
-    return {
-      bvid: vd.bvid || "",
-      title: vd.title || "",
-      uploader: (vd.owner && vd.owner.name) || "",
-      pages: pages,
-    };
+    }
+    // season page: the episode list is resolved by the backend probe, not present in the DOM
+    return { bvid: "ss" + id, title: title, uploader: "", pages: [], season: true, currentEp: epNumber(epInfo) };
+  }
+
+  function epNumber(epInfo) {
+    var n = parseInt(epInfo && epInfo.index_title, 10);
+    return (n >= 1 ? n : 1);
+  }
+
+  function epTitleLabel(epInfo) {
+    if (!epInfo) return "";
+    var n = epInfo.index_title || "";
+    var t = epInfo.long_title || "";
+    return [n, t].filter(Boolean).join(" · ");
   }
 
   function currentPage() {
@@ -322,19 +365,23 @@
       return;
     }
     var sel = currentPage();
+    var info = null;
+    var pfx = meta.season ? "EP" : "P";
     body.innerHTML =
       warnHtml("Parsing video info…", false) +
       '<div class="bdlp-meta"><b>' + esc(meta.title) + "</b>" +
       esc(meta.uploader ? meta.uploader + " · " : "") +
       meta.bvid + " · " + '<span class="bdlp-login">Checking…</span>' + "</div>" +
-      '<span class="bdlp-lbl">Parts (current P' + sel + ")</span>" +
+      (meta.season
+        ? '<span class="bdlp-lbl">Episodes</span>'
+        : '<span class="bdlp-lbl">Parts (current P' + sel + ")</span>") +
       '<div class="bdlp-pages"></div>' +
       '<span class="bdlp-lbl">Quality</span>' +
       '<div class="bdlp-quality"></div>' +
       '<label class="bdlp-check"><input type="checkbox" class="bdlp-audio"> Audio only</label>' +
       '<button class="bdlp-btn">Start download</button>';
 
-    renderPages(body, meta.pages, sel);
+    renderPages(body, meta.pages, sel, pfx);
 
     var qbox = body.querySelector(".bdlp-quality");
     var audio = body.querySelector(".bdlp-audio");
@@ -348,7 +395,7 @@
     });
 
     body.querySelector(".bdlp-btn").addEventListener("click", function () {
-      startDownloadClicked(body, meta, qbox, audio);
+      startDownloadClicked(body, meta, qbox, audio, info);
     });
 
     loginCookie().then(function (ck) {
@@ -366,6 +413,10 @@
         var w = body.querySelector(".bdlp-warn");
         if (j.code === 0 && j.data) {
           if (w) w.remove();
+          info = j.data;
+          if (meta.season && j.data.pages && j.data.pages.length) {
+            renderPages(body, j.data.pages, currentEpisodeFromSheet(j.data.pages, meta.currentEp || 1), pfx);
+          }
           applyQualities(qbox, j.data);
         } else if (w) {
           w.textContent = "Parse failed: " + ((j.msg) || "unknown error");
@@ -379,7 +430,7 @@
       });
   }
 
-  function renderPages(body, pages, sel) {
+  function renderPages(body, pages, sel, pfx) {
     var box = body.querySelector(".bdlp-pages");
     if (!box) return;
     box.innerHTML = "";
@@ -389,7 +440,7 @@
       if (p.page === sel) cb.checked = true;
       if (pages.length === 1) cb.checked = true;
       label.appendChild(cb);
-      label.appendChild(el("span", { "class": "bdlp-page-title" }, "P" + p.page + " · " + (p.title || "")));
+      label.appendChild(el("span", { "class": "bdlp-page-title" }, (pfx || "P") + p.page + " · " + (p.title || "")));
       box.appendChild(label);
     });
     var allLink = el("a", { href: "#", "class": "bdlp-check" }, "Select all / none");
@@ -401,6 +452,14 @@
     });
     box.appendChild(allLink);
   }
+
+  // pick the currently playing episode from the season sheet, else the first page
+    function currentEpisodeFromSheet(pages, currentEp) {
+      for (var i = 0; i < pages.length; i++) {
+        if (pages[i].page === currentEp) return currentEp;
+      }
+      return (pages[0] && pages[0].page) || 1;
+    }
 
   function applyQualities(qbox, info) {
     var items = [];
@@ -421,10 +480,21 @@
     return getCfg().defaultQuality || "auto";
   }
 
-  function startDownloadClicked(body, meta, qbox, audio) {
+  function startDownloadClicked(body, meta, qbox, audio, info) {
     var checks = body.querySelectorAll(".bdlp-page:checked");
     var pages = Array.prototype.map.call(checks, function (c) { return parseInt(c.value, 10); });
     if (!pages.length) { showTip(body, "Select at least one part", true); return; }
+
+    var urls = [];
+    if (meta.season && info && info.pages) {
+      pages.forEach(function (pg) {
+        var hit = null;
+        for (var i = 0; i < info.pages.length; i++) {
+          if (info.pages[i].page === pg) { hit = info.pages[i]; break; }
+        }
+        urls.push((hit && hit.url) || "");
+      });
+    }
 
     var sel = qbox.querySelector(".bdlp-opt.sel");
     var quality = sel ? sel.dataset.quality : "auto";
@@ -438,6 +508,7 @@
       return postDownload({
         url: window.location.href,
         pages: pages,
+        urls: urls,
         quality: audioOnly ? "audio" : quality,
         audio_only: audioOnly,
         cookies: ck,

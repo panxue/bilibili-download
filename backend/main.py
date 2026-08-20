@@ -57,6 +57,7 @@ class InfoBody(BaseModel):
 class DownloadBody(BaseModel):
     url: str
     pages: list[int] = Field(default_factory=lambda: [1])
+    urls: list[str] = Field(default_factory=list)
     quality: str = "auto"
     codec: str = "auto"
     audio_only: bool = False
@@ -73,7 +74,7 @@ class ResumeBody(BaseModel):
 async def health():
     return {"code": 0, "data": {
         "ok": True,
-        "version": "1.2.0",
+        "version": "1.3.0",
         "yt_dlp": _ytdlp_version(),
         "ffmpeg": _ffmpeg_ok(),
         "max_concurrent": settings.download["max_concurrent"],
@@ -148,12 +149,17 @@ async def api_download(body: DownloadBody, request: Request):
 
     jobs = []
     base_title = (body.title or "").strip()
-    for page in body.pages or [1]:
-        url = with_page(body.url, page)
+    for i, page in enumerate(body.pages or [1]):
+        if body.urls and i < len(body.urls) and body.urls[i]:
+            url = body.urls[i]
+            bvid = url.rsplit("/", 1)[-1].split("?")[0]
+        else:
+            url = with_page(body.url, page)
+            bvid = body.url.rsplit("/", 1)[-1].split("?")[0]
         params = {"cookies": body.cookies or "", "overwrite": body.overwrite,
                    "codec": (body.codec or "auto").strip() or "auto"}
         title = f"{base_title} P{page}" if base_title else f"P{page}"
-        job = manager.create_job(url=url, bvid=body.url.rsplit("/", 1)[-1].split("?")[0],
+        job = manager.create_job(url=url, bvid=bvid,
                                  page=page, title=title, quality=quality, params=params)
         manager.enqueue(job.id)
         jobs.append(manager.to_api(job))

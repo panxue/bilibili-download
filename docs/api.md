@@ -65,6 +65,7 @@ Response:
 - Grouped by **qn (Bilibili quality code)**: 1080P and 1080P60 (high frame rate, qn=112/116) are listed separately (yt-dlp reports the same height/fps for both, so they can only be distinguished by qn)
 - `codecs` are sorted by codec preference `hvc > av01 > avc` (HEVC > AV1 > H.264)
 - Login state differences are prefetched by the backend (tiers lacking permission are excluded from the list), so the frontend does not need to gray them out; the unauthenticated list generally only goes up to 480P
+- **Bangumi seasons** (`/bangumi/play/ss…`): yt-dlp returns a playlist, so `pages` contains one entry **per episode** with a `url` field pointing at that episode's `/bangumi/play/ep…` link; `title` is the season name and `available_qualities` is unioned across the resolved episodes. Single `ep` links behave like a one-part video (no `url` on the single page entry).
 - Request failure (network / invalid URL): `code=-2, msg="parse failed"`; invalid cookies: `code=-3`
 
 ## 3. Start a Download
@@ -75,6 +76,7 @@ Request:
 {
   "url": "https://www.bilibili.com/video/BV1xx411c7mD",
   "pages": [ 1, 2, 3 ],              // parts to download; if omitted, defaults to the current part only
+  "urls": ["https://www.bilibili.com/bangumi/play/ep32374"],  // optional; one ep URL per page, used for bangumi seasons
   "quality": "auto",                 // auto | 8K | 4K | 2K | 1080P60 | 1080P | 720P60 | 720P | 480P | 360P | NNNP | audio
   "codec": "auto",                   // codec preference order: auto (default hvc>av01>avc) or comma-separated e.g. "avc,hvc,av01"
   "audio_only": false,               // set to true when quality=audio
@@ -83,6 +85,7 @@ Request:
   "title": "Video Title"                 // for display; job title = "{title} P{n}"
 }
 ```
+- `urls` (optional) is parallel to `pages`: when provided, each job uses `urls[i]` as its download URL instead of `with_page(url, pages[i])`. Season pages populate it with each selected episode's `/bangumi/play/ep…` URL (returned by `/api/info`); ordinary multi-part videos keep using the `?p=N` mechanism and leave it empty.
 Response:
 ```json
 {

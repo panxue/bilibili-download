@@ -51,6 +51,9 @@ class TestCheckCookies:
 @pytest.mark.parametrize("url", [
     "https://www.bilibili.com/video/BV1xx411c7mD",
     "https://www.bilibili.com/video/BV1xx411c7mD?p=3&spm_id_from=333.999",
+    "https://www.bilibili.com/bangumi/play/ss1733",
+    "https://www.bilibili.com/bangumi/play/ep32374",
+    "https://www.bilibili.com/bangumi/play/ss1733?spm_id_from=333.337",
 ])
 def test_is_bilibili_url_accepts(url):
     assert main.is_bilibili_url(url) is True
@@ -61,10 +64,20 @@ def test_is_bilibili_url_accepts(url):
     "https://www.bilibili.com/watchlater/",
     "ftp://www.bilibili.com/video/abc",
     "https://www.bilibili.com/",
+    "https://www.bilibili.com/bangumi/",
+    "https://www.bilibili.com/bangumi/play/ep32374/extra",
     "not a url",
 ])
 def test_is_bilibili_url_rejects(url):
     assert main.is_bilibili_url(url) is False
+
+
+def test_is_bangumi_season():
+    from backend.urls import is_bangumi_season
+
+    assert is_bangumi_season("https://www.bilibili.com/bangumi/play/ss1733") is True
+    assert is_bangumi_season("https://www.bilibili.com/bangumi/play/ep32374") is False
+    assert is_bangumi_season("https://www.bilibili.com/video/BV1xx411c7mD") is False
 
 
 def test_with_page_append_and_remove():

@@ -57,7 +57,7 @@ cookie only sends SESSDATA/DedeUserID/bili_jct                │ to_thread
 Floating Panel           FastAPI               downloader        yt-dlp library      SQLite
   ──┘                      │                      │                │                │
   1 GET /api/health ········▶  (probe; returns version, login-state-independent)
-  2 POST /api/info ────────▶  extract_info(download=False) ─▶ quality list ─▶ returns title/quality list/logged_in
+  2 POST /api/info ────────▶  extract_info(download=False) ─▶ quality list ─▶ returns title/quality list/logged_in; for bangumi seasons, also the per-episode page list (ep URLs) from the playlist resolution
   3 POST /api/download ──▶ create job(write DB) ─▶ enqueue to_thread ─▶ download+merge ─▶ update status(write DB)
   4 GET /api/jobs/stream (SSE,EventSource) ◀─ global progress/final-state event broadcast ◀── progress_hooks callback
   5 after completion, the floating panel shows the result; after power-loss restart scan → interrupted → POST resume to resume

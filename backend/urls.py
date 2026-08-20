@@ -1,15 +1,27 @@
+import re
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
+
+_BANGUMI_PLAY = re.compile(r"/bangumi/play/(ss|ep)[0-9]+/?$")
 
 
 def is_bilibili_url(url: str) -> bool:
-    """Accept only bilibili video page URLs."""
+    """Accept bilibili video pages and bangumi play pages (season ss / episode ep)."""
     try:
         parts = urlsplit(url)
     except ValueError:
         return False
-    return parts.scheme in ("http", "https") and (
-        "bilibili.com" in parts.netloc and "video/" in parts.path
-    )
+    if parts.scheme not in ("http", "https") or "bilibili.com" not in parts.netloc:
+        return False
+    return "video/" in parts.path or bool(_BANGUMI_PLAY.search(parts.path))
+
+
+def is_bangumi_season(url: str) -> bool:
+    """True for a bangumi season URL (/bangumi/play/ss1234); ep links are single episodes."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    return bool(re.search(r"/bangumi/play/ss[0-9]+/?$", parts.path))
 
 
 def with_page(url: str, page: int) -> str:

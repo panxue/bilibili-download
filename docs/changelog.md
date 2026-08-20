@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.0 — 2026-08-20 — Bangumi (anime/drama) support
+
+- `is_bilibili_url` now accepts `/bangumi/play/ss…` (season) and `/bangumi/play/ep…` (episode); modern SSR bangumi pages are parsed via `playurlSSRData`+`og:title`; season URLs list all episodes (resolved server-side with per-episode `ep` URLs) and the download body accepts a parallel `urls` list so multi-episode jobs download each `ep` (see docs/iterations/1.3.0.md).
+
 ## 1.2.0 — 2026-08-20 — Multi-arch image (amd64 + arm64) + digest versioned tags
 
 - Docker Hub image is now a multi-arch manifest (linux/amd64 + linux/arm64) built with buildx + QEMU, so Apple Silicon Macs get an arm64 build on pull; the version tag is read from pyproject.toml at CI time instead of being hardcoded (see docs/iterations/1.2.0.md).

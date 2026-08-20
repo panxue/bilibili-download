@@ -19,7 +19,7 @@ A video download tool for Bilibili: **userscript (frontend floating panel) + loc
 | No. | Feature | Description |
 |------|------|------|
 | F1 | Floating panel injection | Capsule in the bottom-right corner of the player page + 320px panel, Shadow DOM style isolation |
-| F2 | Video info parsing | Reads `window.__INITIAL_STATE__` from the page: title/UP/BV/parts; quality list via backend `POST /api/info` |
+| F2 | Video info parsing | Reads `window.__INITIAL_STATE__` (legacy pages) or `playurlSSRData`+`og:title` (modern SSR bangumi) from the page: title/UP/BV/parts; quality + full episode list (for season URLs) via backend `POST /api/info` |
 | F3 | Quality selection | Quality buttons driven by `/api/info.available_qualities` data (grouped by qn, including high-frame-rate tiers 1080P60/720P60), default `Auto (highest tier)`; codec preference order configurable (`hvc>av01>avc` default, changeable in settings panel) |
 | F4 | Start download | Submit per part → backend creates SQLite job → queue concurrency (default 2) |
 | F5 | Real-time progress | Backend pushes progress (percent/speed/eta/phase) via a single global SSE (`/api/jobs/stream`); the floating panel event bar refreshes in real time, with auto polling fallback on disconnect |
